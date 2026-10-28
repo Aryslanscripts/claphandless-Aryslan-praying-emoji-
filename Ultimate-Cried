@@ -1,10 +1,9 @@
+
 --[[
     Shooter Slop — By Poor Slop AI
-    ─────────────────────────────────────────
-    Silent aim · Gun.Activated → FireServer
-    Modes: Dynamic / Piercer / FakeSheriff
-    Flee Fix · Anti-Tamper · Shots Base
-    Prediction: Predict Core v10 (multi-tau, adaptive, srv-tick)
+    Gun.Activated → silent aim shoot (без __namecall hook).
+    Modes: Dynamic / Piercer / FakeSheriff + Flee Fix + Anti-Tamper.
+    Shots Base: Firebase (Shooted / SuccessfullyKilled).
 ]]
 
 local Players           = game:GetService("Players")
@@ -13,7 +12,6 @@ local RunService        = game:GetService("RunService")
 local TweenService      = game:GetService("TweenService")
 local CollectionService = game:GetService("CollectionService")
 local HttpService       = game:GetService("HttpService")
-local StatsService      = game:GetService("Stats")
 local LocalPlayer       = Players.LocalPlayer
 
 -- ============================================================
@@ -40,9 +38,6 @@ local S = {
     PlayerGui    = string.char(80,108,97,121,101,114,71,117,105),
     Beacon       = string.char(83,83,95,65,84,95,57,102,50,97,95,120,56,51),
     ATKey        = string.char(95,95,83,83,95,65,84,95,75,69,89),
-    Remotes      = string.char(82,101,109,111,116,101,115),
-    Gameplay     = string.char(71,97,109,101,112,108,97,121),
-    PDChanged    = string.char(80,108,97,121,101,114,68,97,116,97,67,104,97,110,103,101,100),
     FB_URL       = string.char(
         104,116,116,112,115,58,47,47,
         115,104,111,111,116,45,97,114,121,115,108,97,110,104,117,98,
@@ -101,8 +96,8 @@ end
 
 task.spawn(function() while true do task.wait(10); shotsBaseFlush() end end)
 
-local function bumpShot() pendingShots += 1; if updateShotsBaseUI then updateShotsBaseUI() end end
-local function bumpKill() pendingKills += 1; if updateShotsBaseUI then updateShotsBaseUI() end end
+local function bumpShot() pendingShots = pendingShots + 1; if updateShotsBaseUI then updateShotsBaseUI() end end
+local function bumpKill() pendingKills = pendingKills + 1; if updateShotsBaseUI then updateShotsBaseUI() end end
 
 -- ============================================================
 -- SPLASH
@@ -110,79 +105,79 @@ local function bumpKill() pendingKills += 1; if updateShotsBaseUI then updateSho
 task.spawn(function()
     local playerGui = LocalPlayer:WaitForChild(S.PlayerGui)
     local old = playerGui:FindFirstChild(S.Splash); if old then old:Destroy() end
-    local gui = Instance.new("ScreenGui")
-    gui.Name, gui.ResetOnSpawn, gui.IgnoreGuiInset, gui.DisplayOrder =
+    local splashGui = Instance.new("ScreenGui")
+    splashGui.Name, splashGui.ResetOnSpawn, splashGui.IgnoreGuiInset, splashGui.DisplayOrder =
         S.Splash, false, true, 100000
-    gui.Parent = playerGui
+    splashGui.Parent = playerGui
 
     local bg = Instance.new("Frame")
     bg.Size, bg.BackgroundColor3, bg.BackgroundTransparency, bg.BorderSizePixel =
         UDim2.fromScale(1,1), Color3.fromRGB(8,6,16), 1, 0
-    bg.Parent = gui
-    local g = Instance.new("UIGradient")
-    g.Color = ColorSequence.new{
+    bg.Parent = splashGui
+    local bgGrad = Instance.new("UIGradient")
+    bgGrad.Color = ColorSequence.new{
         ColorSequenceKeypoint.new(0, Color3.fromRGB(12,4,28)),
         ColorSequenceKeypoint.new(0.5, Color3.fromRGB(6,8,20)),
         ColorSequenceKeypoint.new(1, Color3.fromRGB(24,4,18)),
     }
-    g.Rotation, g.Parent = 60, bg
+    bgGrad.Rotation, bgGrad.Parent = 60, bg
 
-    local box = Instance.new("Frame")
-    box.Size, box.Position, box.AnchorPoint, box.BackgroundTransparency =
+    local titleBox = Instance.new("Frame")
+    titleBox.Size, titleBox.Position, titleBox.AnchorPoint, titleBox.BackgroundTransparency =
         UDim2.new(0,640,0,110), UDim2.fromScale(0.5,0.44), Vector2.new(0.5,0.5), 1
-    box.Parent = bg
-    local sc = Instance.new("UIScale"); sc.Scale, sc.Parent = 0.35, box
-
+    titleBox.Parent = bg
+    local titleScale = Instance.new("UIScale"); titleScale.Scale, titleScale.Parent = 0.35, titleBox
     local title = Instance.new("TextLabel")
     title.Size, title.BackgroundTransparency, title.Text = UDim2.fromScale(1,1), 1, "Shooter Slop"
     title.TextColor3, title.Font, title.TextSize, title.TextTransparency =
         Color3.fromRGB(255,255,255), Enum.Font.GothamBlack, 84, 1
-    title.Parent = box
-    local tg = Instance.new("UIGradient")
-    tg.Color = ColorSequence.new{
+    title.Parent = titleBox
+    local titleGrad = Instance.new("UIGradient")
+    titleGrad.Color = ColorSequence.new{
         ColorSequenceKeypoint.new(0, Color3.fromRGB(255,200,140)),
         ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255,255,255)),
         ColorSequenceKeypoint.new(1, Color3.fromRGB(140,200,255)),
     }
-    tg.Parent = title
-    local ts = Instance.new("UIStroke")
-    ts.Color, ts.Thickness, ts.Transparency = Color3.fromRGB(120,200,255), 2, 1
-    ts.Parent = title
+    titleGrad.Parent = title
+    local titleStroke = Instance.new("UIStroke")
+    titleStroke.Color, titleStroke.Thickness, titleStroke.Transparency =
+        Color3.fromRGB(120,200,255), 2, 1
+    titleStroke.Parent = title
 
-    local div = Instance.new("Frame")
-    div.Size, div.Position, div.AnchorPoint = UDim2.new(0,0,0,2), UDim2.fromScale(0.5,0.535), Vector2.new(0.5,0.5)
-    div.BackgroundColor3, div.BorderSizePixel, div.Parent = Color3.fromRGB(150,210,255), 0, bg
-    local dg = Instance.new("UIGradient")
-    dg.Transparency = NumberSequence.new{
+    local divider = Instance.new("Frame")
+    divider.Size, divider.Position, divider.AnchorPoint = UDim2.new(0,0,0,2), UDim2.fromScale(0.5,0.535), Vector2.new(0.5,0.5)
+    divider.BackgroundColor3, divider.BorderSizePixel, divider.Parent = Color3.fromRGB(150,210,255), 0, bg
+    local divGrad = Instance.new("UIGradient")
+    divGrad.Transparency = NumberSequence.new{
         NumberSequenceKeypoint.new(0,1), NumberSequenceKeypoint.new(0.5,0), NumberSequenceKeypoint.new(1,1),
     }
-    dg.Parent = div
+    divGrad.Parent = divider
 
-    local sub = Instance.new("TextLabel")
-    sub.Size, sub.Position, sub.AnchorPoint = UDim2.new(0,640,0,40), UDim2.fromScale(0.5,0.63), Vector2.new(0.5,0.5)
-    sub.BackgroundTransparency, sub.Text = 1, "By  Poor Slop AI"
-    sub.TextColor3, sub.Font, sub.TextSize, sub.TextTransparency =
+    local subtitle = Instance.new("TextLabel")
+    subtitle.Size, subtitle.Position, subtitle.AnchorPoint = UDim2.new(0,640,0,40), UDim2.fromScale(0.5,0.63), Vector2.new(0.5,0.5)
+    subtitle.BackgroundTransparency, subtitle.Text = 1, "By  Poor Slop AI"
+    subtitle.TextColor3, subtitle.Font, subtitle.TextSize, subtitle.TextTransparency =
         Color3.fromRGB(200,220,255), Enum.Font.GothamBold, 22, 1
-    sub.Parent = bg
+    subtitle.Parent = bg
 
     TweenService:Create(bg, TweenInfo.new(0.3), {BackgroundTransparency=0}):Play()
     task.wait(0.25)
     TweenService:Create(title, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {TextTransparency=0}):Play()
-    TweenService:Create(sc, TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale=1}):Play()
-    TweenService:Create(ts, TweenInfo.new(0.45), {Transparency=0.4}):Play()
+    TweenService:Create(titleScale, TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale=1}):Play()
+    TweenService:Create(titleStroke, TweenInfo.new(0.45), {Transparency=0.4}):Play()
     task.wait(0.35)
-    TweenService:Create(div, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size=UDim2.new(0,420,0,2)}):Play()
+    TweenService:Create(divider, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size=UDim2.new(0,420,0,2)}):Play()
     task.wait(0.2)
-    sub.Position = UDim2.fromScale(0.5,0.65)
-    TweenService:Create(sub, TweenInfo.new(0.35), {TextTransparency=0}):Play()
-    TweenService:Create(sub, TweenInfo.new(0.35), {Position=UDim2.fromScale(0.5,0.60)}):Play()
+    subtitle.Position = UDim2.fromScale(0.5,0.65)
+    TweenService:Create(subtitle, TweenInfo.new(0.35), {TextTransparency=0}):Play()
+    TweenService:Create(subtitle, TweenInfo.new(0.35), {Position=UDim2.fromScale(0.5,0.60)}):Play()
     task.wait(1.85)
     TweenService:Create(bg, TweenInfo.new(0.55), {BackgroundTransparency=1}):Play()
     TweenService:Create(title, TweenInfo.new(0.55), {TextTransparency=1}):Play()
-    TweenService:Create(ts, TweenInfo.new(0.55), {Transparency=1}):Play()
-    TweenService:Create(sub, TweenInfo.new(0.55), {TextTransparency=1}):Play()
-    TweenService:Create(div, TweenInfo.new(0.55), {BackgroundTransparency=1}):Play()
-    task.wait(0.6); gui:Destroy()
+    TweenService:Create(titleStroke, TweenInfo.new(0.55), {Transparency=1}):Play()
+    TweenService:Create(subtitle, TweenInfo.new(0.55), {TextTransparency=1}):Play()
+    TweenService:Create(divider, TweenInfo.new(0.55), {BackgroundTransparency=1}):Play()
+    task.wait(0.6); splashGui:Destroy()
 end)
 
 -- ============================================================
@@ -197,10 +192,11 @@ local CONFIG = {
     Cooldown = 0.25,
     KillCheckTime = 5,
     NotificationDuration = 2.5,
+    MurdererPollInterval = 0.5,
 }
 
 -- ============================================================
--- PREDICT CORE v10
+-- SILENT AIM CORE
 -- ============================================================
 local SILENT_AIM_MODES        = { "Dynamic", "Piercer", "FakeSheriff" }
 local SILENT_AIM_LEGACY_MODES = {
@@ -210,71 +206,23 @@ local SILENT_AIM_LEGACY_MODES = {
 local silentAimMode = "Dynamic"
 
 local silentAimTune = {
-    -- Timing
-    leadBase          = 0.055,
-    leadMin           = 0.02,
-    leadMax           = 0.55,
-    pingEmaAlpha      = 0.20,
-    jitterFactor      = 0.50,
-    serverTickDefault = 1/30,
-    serverTickAlpha   = 0.05,
-
-    -- Intent
-    intentBlend    = 0.55,
-    intentBlendAir = 0.35,
-    blendSmooth    = 0.25,
-    accelBoost     = 0.15,
-
-    -- Turn
-    turnGate       = 0.15,
-    turnBoost      = 0.05,
-    straightScale  = 1.0,
-    turnScale      = 1.0,
-
-    -- Vertical
-    gravityScale   = 1.0,
-    airAimHeight   = 5,
-    fallMargin     = 2,
-    floorClamp     = 1.2,
-    yBias          = 0,
-
-    -- Multi-tau (air)
-    tauSpacing     = 0.030,
-    tauCount       = 5,
-    airTauBoost    = 1.5,
-
-    -- Feedback
-    baseAdaptSpeed = 0.30,
-    baseAdaptMin   = 0.02,
-    baseAdaptMax   = 0.30,
+    pingScale=1, base=0.113, minLead=0.02, maxLead=0.60,
+    airExtra=0, turnBoost=0, turnGate=0.15,
+    intentBlend=0.85, intentBlendAir=0.50,
+    straightScale=1, turnScale=1,
+    airAimHeight=5, fallMargin=2, gravityScale=1,
+    yBias=0, floorClamp=1.2,
 }
-
 local silentAimOvershoot, silentAimPiercerBack = 4, 4
 local TURN_WINDOW, TURN_MIN_SPEED, HIST_SPAN = 0.12, 1.5, 1.0
 
 local FLEE_OFFSET_X, FLEE_OFFSET_Y, FLEE_OFFSET_Z = 2.0, 1.0, 0.0
 local FLEE_MIN_SPEED, FLEE_MIN_DISTANCE, FLEE_DOT_THRESHOLD = 4.0, 8.0, 0.55
-local FLEE_AVG_WINDOW = 0.15
-
-local FAKE_SH_SIGHT_RANGE, FAKE_SH_FOV_DOT = 300, -0.30
-local FAKE_SH_RECHECK_DELAY = 0.030
+local FAKE_SH_SIGHT_RANGE, FAKE_SH_FOV_DOT = 300, 0.30
 
 local silentAimState, silentAimStateTick, silentAimLastLead = nil, 0, 0
 local finalAimCore = Vector3.zero
-
--- Unified predictive state
-local PC = {
-    ping = 0, pingPrev = 0, jitter = 0,
-    serverTick = silentAimTune.serverTickDefault,
-    baseAdapt  = 0,
-    lastLead   = 0,
-    lastHitLead= nil, lastMissLead = nil,
-    hits = 0, misses = 0,
-}
-
--- Per-player caches
-local saHist, saFleeHist, saBlend = {}, {}, {}
-local saSmoothVel, saSmoothAccel, saLastJump, saLastTick = {}, {}, {}, {}
+local saHist, saSmoothVel, saSmoothAccel, saLastJump, saLastTick = {}, {}, {}, {}, {}
 
 -- ============================================================
 -- HELPERS
@@ -285,181 +233,58 @@ local function normalizeSilentAimType(arg)
     for _, v in ipairs(SILENT_AIM_MODES) do if arg == v then return arg end end
     return "Dynamic"
 end
-
-local function saFlat(v) return Vector3.new(v.X, 0, v.Z) end
+local function saFlat(v) return Vector3.new(v.X,0,v.Z) end
 local function saSafeUnit(v) return v.Magnitude > 1e-4 and v.Unit or Vector3.zero end
-
-local function saTurnBetween(a, b)
+local function saTurnBetween(a,b)
     if a.Magnitude < TURN_MIN_SPEED or b.Magnitude < TURN_MIN_SPEED then return 0 end
     return 1 - math.clamp(a.Unit:Dot(b.Unit), -1, 1)
 end
-
 local function saPushVelSample(player, vel)
     local now = os.clock()
     local h = saHist[player] or {}; saHist[player] = h
-    table.insert(h, { now, vel })
-    while #h > 0 and now - h[1][1] > HIST_SPAN do table.remove(h, 1) end
+    table.insert(h, {now, vel.X, vel.Y, vel.Z})
+    while #h > 0 and now - h[1][1] > HIST_SPAN do table.remove(h,1) end
 end
-
 local function saVelAgo(player, ago)
-    local h = saHist[player]
-    if not h or #h == 0 then return nil end
-    local now = os.clock()
-    if TURN_WINDOW < now - h[#h][1] then return nil end
+    local h = saHist[player]; if not h or #h == 0 then return nil end
+    local now = os.clock(); if TURN_WINDOW < now - h[#h][1] then return nil end
     local tgt = now - ago
-    for i = #h, 1, -1 do
-        if h[i][1] <= tgt then return h[i][2] end
+    for i = #h,1,-1 do
+        if h[i][1] <= tgt then return Vector3.new(h[i][2],h[i][3],h[i][4]) end
     end
-    return h[1][2]
+    return Vector3.new(h[1][2],h[1][3],h[1][4])
 end
-
-local function saAvgFleeDir(player)
-    local h = saFleeHist[player]
-    if not h or #h == 0 then return Vector3.zero end
-    local now = os.clock()
-    local sum, count = Vector3.zero, 0
-    for i = #h, 1, -1 do
-        if now - h[i][1] > FLEE_AVG_WINDOW then break end
-        sum += h[i][2]; count += 1
-    end
-    if count == 0 then return Vector3.zero end
-    return saSafeUnit(sum / count)
-end
-
-local function saPushFleeSample(player, vel)
-    local now = os.clock()
-    local flat = saFlat(vel)
-    if flat.Magnitude < 1 then return end
-    local h = saFleeHist[player] or {}; saFleeHist[player] = h
-    table.insert(h, { now, flat.Unit })
-    while #h > 0 and now - h[1][1] > FLEE_AVG_WINDOW * 2 do table.remove(h, 1) end
-end
-
--- ============================================================
--- PING (EMA + jitter)
--- ============================================================
-local function getRawPing()
+local function getPingSafe()
     local p = 0
     pcall(function()
-        local net = StatsService and StatsService.Network
-        local srv = net and net.ServerStatsItem
-        local item = srv and srv["Data Ping"]
-        if item and item.GetValue then
-            local v = item:GetValue()
-            if type(v) == "number" and v == v and v > 0 then p = v / 1000 end
-        end
+        local v = LocalPlayer:GetNetworkPing()
+        if type(v) == "number" and v == v then p = v end
     end)
-    if p == 0 then
-        pcall(function()
-            local v = LocalPlayer:GetNetworkPing()
-            if type(v) == "number" and v == v then p = v end
-        end)
-    end
     return p
 end
 
-local function updatePing()
-    local raw = getRawPing()
-    if raw <= 0 then return end
-    if PC.ping == 0 then PC.ping, PC.pingPrev = raw, raw; return end
-    PC.pingPrev = PC.ping
-    PC.ping = PC.ping * (1 - silentAimTune.pingEmaAlpha) + raw * silentAimTune.pingEmaAlpha
-    PC.jitter = PC.jitter * 0.9 + math.abs(raw - PC.pingPrev) * 0.1
-end
-
--- ============================================================
--- SERVER TICK AUTO-DETECT (safe pcall)
--- ============================================================
-local pdTimestamps = {}
-local function onPDChanged()
-    table.insert(pdTimestamps, os.clock())
-    if #pdTimestamps > 20 then table.remove(pdTimestamps, 1) end
-    if #pdTimestamps < 5 then return end
-    local diffs = {}
-    for i = 2, #pdTimestamps do table.insert(diffs, pdTimestamps[i] - pdTimestamps[i-1]) end
-    table.sort(diffs)
-    local median = diffs[math.floor(#diffs/2)+1]
-    if median and median > 0.001 and median < 1 then
-        PC.serverTick = PC.serverTick * (1 - silentAimTune.serverTickAlpha)
-                      + median * silentAimTune.serverTickAlpha
-    end
-end
-
-task.spawn(function()
-    pcall(function()
-        local remotes  = ReplicatedStorage:WaitForChild(S.Remotes, 15)
-        local gameplay = remotes and remotes:WaitForChild(S.Gameplay, 15)
-        local pd       = gameplay and gameplay:WaitForChild(S.PDChanged, 15)
-        if pd and pd.OnClientEvent then
-            pd.OnClientEvent:Connect(onPDChanged)
-        end
-    end)
-end)
-
--- ============================================================
--- FEEDBACK (hit / miss)
--- ============================================================
-local function registerHit(lead)
-    PC.hits += 1
-    PC.lastHitLead = lead
-    PC.baseAdapt = math.max(silentAimTune.baseAdaptMin, PC.baseAdapt - 0.003)
-end
-
-local function registerMiss(lead)
-    PC.misses += 1
-    PC.lastMissLead = lead
-    PC.baseAdapt = math.min(silentAimTune.baseAdaptMax,
-        PC.baseAdapt + 0.005 * silentAimTune.baseAdaptSpeed / 0.3)
-end
-
--- ============================================================
--- UNIFIED LEAD
--- ============================================================
-local function computeLead()
-    local rttHalf    = PC.ping / 2
-    local tickHalf   = PC.serverTick / 2
-    local jitterComp = PC.jitter * silentAimTune.jitterFactor
-    local base       = silentAimTune.leadBase + PC.baseAdapt
-    return math.clamp(rttHalf + tickHalf + jitterComp + base,
-        silentAimTune.leadMin, silentAimTune.leadMax)
-end
-
--- ============================================================
--- BUILD STATE
--- ============================================================
 local function silentAimBuildState(player)
     local char = player and player.Character
     local hrp  = char and char:FindFirstChild(S.HRP)
     local hum  = char and char:FindFirstChildOfClass(S.Humanoid)
     if not (hrp and hum) then return nil end
-
     local vel = hrp.AssemblyLinearVelocity
     local jumpAge = os.clock() - (saLastJump[player] or 0)
     local ok, st = pcall(function() return hum:GetState() end)
-    local stateAir = ok and (st == Enum.HumanoidStateType.Jumping
-                          or st == Enum.HumanoidStateType.Freefall)
-
+    local stateAir = ok and (st == Enum.HumanoidStateType.Jumping or st == Enum.HumanoidStateType.Freefall)
     local rp = RaycastParams.new()
     rp.FilterType = Enum.RaycastFilterType.Exclude
-    local filt = { char }
-    if LocalPlayer.Character then filt[2] = LocalPlayer.Character end
-    rp.FilterDescendantsInstances = filt
-    rp.IgnoreWater = true
-    local hit = workspace:Raycast(hrp.Position, Vector3.new(0, -80, 0), rp)
+    local filt = { char }; if LocalPlayer.Character then filt[2] = LocalPlayer.Character end
+    rp.FilterDescendantsInstances = filt; rp.IgnoreWater = true
+    local hit = workspace:Raycast(hrp.Position, Vector3.new(0,-80,0), rp)
     local velAgo = saVelAgo(player, TURN_WINDOW) or vel
-
     return {
-        player = player,
-        pos = hrp.Position,
-        vel = vel,
+        pos = hrp.Position, vel = vel,
         svel = saSmoothVel[player] or vel,
         accel = saSmoothAccel[player] or Vector3.zero,
-        moveDir = hum.MoveDirection,
-        walkSpeed = hum.WalkSpeed,
-        jumpPower = hum.UseJumpPower and hum.JumpPower
-                    or (hum.JumpHeight * 2 * workspace.Gravity) ^ 0.5,
-        speed = saFlat(vel).Magnitude,
-        speed3 = vel.Magnitude,
+        moveDir = hum.MoveDirection, walkSpeed = hum.WalkSpeed,
+        jumpPower = hum.UseJumpPower and hum.JumpPower or (hum.JumpHeight*2*workspace.Gravity)^0.5,
+        speed = saFlat(vel).Magnitude, speed3 = vel.Magnitude,
         turn = saTurnBetween(saFlat(vel), saFlat(velAgo)),
         accelMag = (saSmoothAccel[player] or Vector3.zero).Magnitude,
         jumpAge = jumpAge,
@@ -467,14 +292,91 @@ local function silentAimBuildState(player)
         sitting = hum.Sit or hum.PlatformStand,
         strafing = hum.MoveDirection.Magnitude > 0.1,
         floorY = hit and hit.Position.Y or nil,
-        standHeight = math.clamp(hum.HipHeight + hrp.Size.Y * 0.5, 0.5, 8),
-        ping = PC.ping,
+        standHeight = math.clamp(hum.HipHeight + hrp.Size.Y*0.5, 0.5, 8),
+        ping = getPingSafe(),
     }
 end
 
--- ============================================================
--- WALL CHECK
--- ============================================================
+local function isTargetFleeingFromMe(state)
+    if FLEE_OFFSET_X <= 0 then return false end
+    local myChar = LocalPlayer.Character; if not myChar then return false end
+    local myHrp = myChar:FindFirstChild(S.HRP); if not myHrp then return false end
+    local vel = saFlat(state.vel); if vel.Magnitude < FLEE_MIN_SPEED then return false end
+    local toMe = saFlat(myHrp.Position - state.pos)
+    if toMe.Magnitude < FLEE_MIN_DISTANCE then return false end
+    return vel.Unit:Dot(toMe.Unit) < -FLEE_DOT_THRESHOLD
+end
+
+local function checkAllPlayersVisibleMurderer(target)
+    if not target then return "", false end
+    local targetChar = target.Character; if not targetChar then return "", false end
+    local targetHRP = targetChar:FindFirstChild(S.HRP) or targetChar:FindFirstChild(S.Head)
+    local targetHum = targetChar:FindFirstChildOfClass(S.Humanoid)
+    if not targetHRP then return "", false end
+    if targetHum and targetHum.Health <= 0 then return "", false end
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Exclude; rp.IgnoreWater = true
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LocalPlayer or p == target then continue end
+        local char = p.Character; if not char then continue end
+        local hrp = char:FindFirstChild(S.HRP)
+        local head = char:FindFirstChild(S.Head)
+        local hum = char:FindFirstChildOfClass(S.Humanoid)
+        if not hrp or not hum or hum.Health <= 0 then continue end
+        local eye = head or hrp
+        local toTarget = targetHRP.Position - eye.Position
+        local dist = toTarget.Magnitude
+        if dist < 1 or dist > FAKE_SH_SIGHT_RANGE then continue end
+        if hrp.CFrame.LookVector:Dot(toTarget.Unit) < FAKE_SH_FOV_DOT then continue end
+        rp.FilterDescendantsInstances = { char, targetChar }
+        local hit = workspace:Raycast(eye.Position, toTarget, rp)
+        if not hit or hit.Instance:IsDescendantOf(targetChar) then return p.Name, true end
+    end
+    return "", false
+end
+
+local silentAimPredictors = {}
+
+silentAimPredictors.Dynamic = function(s, t)
+    t = t or silentAimTune
+    if s.sitting then return s.pos, 0 end
+    local n = s.ping*t.pingScale + t.base
+    if s.air then n += t.airExtra end
+    if t.turnGate < s.turn then n += s.turn*t.turnBoost end
+    local lead = math.clamp(n, t.minLead, t.maxLead)
+    local intent = s.moveDir * (s.walkSpeed > 0 and s.walkSpeed or 16)
+    local ib = s.air and t.intentBlendAir or t.intentBlend
+    local sc = math.clamp((s.turn - t.turnGate) / math.max(0.001, 1 - t.turnGate), 0, 1)
+    local hP = saFlat(s.vel):Lerp(saFlat(intent), ib) * lead
+        * (t.straightScale + (t.turnScale - t.straightScale) * sc)
+    local g = workspace.Gravity
+    local floorY = s.floorY and (s.floorY + (s.standHeight or 3)) or (s.pos.Y - t.floorClamp)
+    local jp = (s.jumpPower or 0) > 0 and s.jumpPower or 50
+    local peak = jp*jp/2*g
+    local y
+    if not s.air then
+        y = s.pos.Y
+    elseif peak + t.fallMargin < (s.pos.Y - floorY) then
+        y = math.max(s.pos.Y + s.vel.Y*lead - 0.5*g*t.gravityScale*lead*lead, floorY)
+    else
+        y = floorY + t.airAimHeight
+    end
+    return Vector3.new(s.pos.X + hP.X, y + t.yBias, s.pos.Z + hP.Z), lead
+end
+
+silentAimPredictors.Piercer = function(s, t) return silentAimPredictors.Dynamic(s, t) end
+silentAimPredictors.FakeSheriff = function(s, t) return silentAimPredictors.Dynamic(s, t) end
+
+local function silentAimPiercerOrigin(s)
+    local v = saFlat(s.vel); if v.Magnitude < 1 then v = saFlat(s.moveDir) end
+    return CFrame.new(s.pos - saSafeUnit(v) * silentAimPiercerBack)
+end
+local function silentAimExtend(fromPos, toPos)
+    local n = toPos - fromPos
+    if n.Magnitude <= 0.001 then return toPos end
+    return fromPos + n + n.Unit * silentAimOvershoot
+end
+
 local function silentAimWallBlocked(myChar, murdererChar, fromPos, toPos)
     local delta = toPos - fromPos
     if delta.Magnitude < 0.001 then return false, nil end
@@ -487,7 +389,7 @@ local function silentAimWallBlocked(myChar, murdererChar, fromPos, toPos)
     params.FilterType = Enum.RaycastFilterType.Exclude
     params.FilterDescendantsInstances = filter
     params.IgnoreWater = true
-    for _ = 1, 32 do
+    for _ = 1, 12 do
         local hit = workspace:Raycast(fromPos, delta, params)
         if not hit then return false, nil end
         if murdererChar and hit.Instance:IsDescendantOf(murdererChar) then return false, nil end
@@ -500,251 +402,64 @@ local function silentAimWallBlocked(myChar, murdererChar, fromPos, toPos)
     return false, nil
 end
 
--- ============================================================
--- FLEE CHECK (avg direction)
--- ============================================================
-local function isTargetFleeingFromMe(state)
-    if FLEE_OFFSET_X <= 0 then return false end
-    local myChar = LocalPlayer.Character
-    if not myChar then return false end
-    local myHrp = myChar:FindFirstChild(S.HRP)
-    if not myHrp then return false end
-
-    local avgDir = saAvgFleeDir(state.player)
-    if avgDir.Magnitude < 0.5 then return false end
-
-    if saFlat(state.vel).Magnitude < FLEE_MIN_SPEED then return false end
-
-    local toMe = saFlat(myHrp.Position - state.pos)
-    if toMe.Magnitude < FLEE_MIN_DISTANCE then return false end
-
-    return avgDir:Dot(toMe.Unit) < -FLEE_DOT_THRESHOLD
-end
-
--- ============================================================
--- CHECK ALL PLAYERS VISIBLE MURDERER
--- ============================================================
-local function checkAllPlayersVisibleMurderer(target)
-    if not target then return "", false end
-    local tChar = target.Character
-    if not tChar then return "", false end
-    local tHRP = tChar:FindFirstChild(S.HRP) or tChar:FindFirstChild(S.Head)
-    local tHum = tChar:FindFirstChildOfClass(S.Humanoid)
-    if not tHRP then return "", false end
-    if tHum and tHum.Health <= 0 then return "", false end
-
-    local rp = RaycastParams.new()
-    rp.FilterType = Enum.RaycastFilterType.Exclude
-    rp.IgnoreWater = true
-
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p == LocalPlayer or p == target then continue end
-        local char = p.Character
-        if not char then continue end
-        local hrp = char:FindFirstChild(S.HRP)
-        local head = char:FindFirstChild(S.Head)
-        local hum = char:FindFirstChildOfClass(S.Humanoid)
-        if not hrp or not hum or hum.Health <= 0 then continue end
-
-        local eye = head or hrp
-        local toTarget = tHRP.Position - eye.Position
-        local dist = toTarget.Magnitude
-        if dist < 1 or dist > FAKE_SH_SIGHT_RANGE then continue end
-        if hrp.CFrame.LookVector:Dot(toTarget.Unit) < FAKE_SH_FOV_DOT then continue end
-
-        rp.FilterDescendantsInstances = { char, tChar }
-        local hit = workspace:Raycast(eye.Position, toTarget, rp)
-        if not hit or hit.Instance:IsDescendantOf(tChar) then
-            return p.Name, true
-        end
-    end
-    return "", false
-end
-
--- ============================================================
--- PREDICTORS
--- ============================================================
-local silentAimPredictors = {}
-
--- Single-point predictor for a specific lead
-local function predictAt(s, lead)
-    if s.sitting then return s.pos end
-
-    -- Adaptive intent blend
-    local blendBase = s.air and silentAimTune.intentBlendAir or silentAimTune.intentBlend
-    local accelEffect = math.min(1, s.accelMag / 800) * silentAimTune.accelBoost
-    local blend = math.clamp(blendBase - accelEffect, 0.15, 0.95)
-
-    local intent = s.moveDir * (s.walkSpeed > 0 and s.walkSpeed or 16)
-    local rawBlend = saFlat(s.vel):Lerp(saFlat(intent), blend)
-
-    if s.player then
-        local prev = saBlend[s.player]
-        if prev then
-            rawBlend = prev:Lerp(rawBlend, math.clamp(silentAimTune.blendSmooth, 0, 1))
-        end
-        saBlend[s.player] = rawBlend
-    end
-
-    -- Turn scaling
-    local sc = math.clamp((s.turn - silentAimTune.turnGate)
-        / math.max(0.001, 1 - silentAimTune.turnGate), 0, 1)
-    local scale = (silentAimTune.straightScale or 1)
-        + ((silentAimTune.turnScale or 1) - (silentAimTune.straightScale or 1)) * sc
-    local hPred = rawBlend * lead * scale
-
-    -- Vertical
-    local g = workspace.Gravity
-    local floorY = s.floorY and (s.floorY + (s.standHeight or 3))
-                    or (s.pos.Y - silentAimTune.floorClamp)
-    local jp = (s.jumpPower or 0) > 0 and s.jumpPower or 50
-    local peak = jp * jp / 2 * g
-
-    local y
-    if not s.air then
-        y = s.pos.Y
-    elseif s.vel.Y > 0 then
-        y = s.pos.Y + s.vel.Y * lead - 0.5 * g * silentAimTune.gravityScale * lead * lead
-        y = math.max(y, floorY)
-    elseif peak + silentAimTune.fallMargin < (s.pos.Y - floorY) then
-        y = math.max(s.pos.Y + s.vel.Y * lead
-            - 0.5 * g * silentAimTune.gravityScale * lead * lead, floorY)
-    else
-        y = floorY + silentAimTune.airAimHeight
-    end
-
-    return Vector3.new(s.pos.X + hPred.X, y + silentAimTune.yBias, s.pos.Z + hPred.Z)
-end
-
-silentAimPredictors.Dynamic = function(s, t)
-    t = t or silentAimTune
-    if s.sitting then return s.pos, 0 end
-
-    local lead = computeLead()
-
-    if not s.air then
-        return predictAt(s, lead), lead
-    end
-
-    -- Multi-tau for air
-    local n = silentAimTune.tauCount
-    local spacing = silentAimTune.tauSpacing * silentAimTune.airTauBoost
-    local sum, sumW = Vector3.zero, 0
-    local half = (n - 1) / 2
-
-    for i = 0, n - 1 do
-        local k = (i - half) / half
-        local tau = math.clamp(lead + k * spacing, t.leadMin, t.leadMax)
-        local w = math.exp(-0.5 * (k * 1.2) ^ 2)
-        sum += predictAt(s, tau) * w
-        sumW += w
-    end
-
-    return sum / sumW, lead
-end
-
-silentAimPredictors.Piercer     = function(s, t) return silentAimPredictors.Dynamic(s, t) end
-silentAimPredictors.FakeSheriff = function(s, t) return silentAimPredictors.Dynamic(s, t) end
-
--- Piercer origin (clamp-to-wall instead of nil-fallback)
-local function silentAimPiercerOrigin(s, murdererChar)
-    local avgDir = saAvgFleeDir(s.player)
-    local dir = avgDir.Magnitude > 0.5 and avgDir or saSafeUnit(saFlat(s.vel))
-    if dir.Magnitude < 0.5 then dir = saSafeUnit(saFlat(s.moveDir)) end
-    if dir.Magnitude < 0.5 then return CFrame.new(s.pos) end
-
-    local rawOrigin = s.pos - dir * silentAimPiercerBack
-
-    if murdererChar then
-        local myChar = LocalPlayer.Character
-        local rp = RaycastParams.new()
-        rp.FilterType = Enum.RaycastFilterType.Exclude
-        rp.FilterDescendantsInstances = { myChar, murdererChar }
-        rp.IgnoreWater = true
-        local hit = workspace:Raycast(rawOrigin, s.pos - rawOrigin, rp)
-        if hit then
-            rawOrigin = hit.Position + hit.Normal * 0.5
-        end
-    end
-
-    return CFrame.new(rawOrigin)
-end
-
-local function silentAimExtend(fromPos, toPos)
-    local n = toPos - fromPos
-    if n.Magnitude <= 0.001 then return toPos end
-    return fromPos + n + n.Unit * silentAimOvershoot
-end
-
--- ============================================================
--- RESOLVE SHOT
--- ============================================================
 local function silentAimResolveShot(targetPlayer, startCFrame)
     local state = silentAimBuildState(targetPlayer)
     if not state then return startCFrame, nil, nil end
-
     local mode = normalizeSilentAimType(silentAimMode)
     local pred = silentAimPredictors[mode] or silentAimPredictors.Dynamic
-
     local core, lead
-
     if isTargetFleeingFromMe(state) then
-        local avgDir = saAvgFleeDir(state.player)
-        if avgDir.Magnitude < 0.5 then avgDir = saSafeUnit(saFlat(state.vel)) end
-        if avgDir.Magnitude < 0.5 then avgDir = saSafeUnit(saFlat(state.moveDir)) end
-        local perp = Vector3.new(-avgDir.Z, 0, avgDir.X)
+        local fleeDir = saFlat(state.vel)
+        fleeDir = fleeDir.Magnitude > 1 and fleeDir.Unit or Vector3.zero
+        local perp = Vector3.new(-fleeDir.Z, 0, fleeDir.X)
         core = state.pos
-            + avgDir * FLEE_OFFSET_X
+            + fleeDir * FLEE_OFFSET_X
             + Vector3.new(0, FLEE_OFFSET_Y, 0)
             + perp * FLEE_OFFSET_Z
         lead = 0
     else
         core, lead = pred(state, silentAimTune)
     end
-
     silentAimState     = state
     silentAimStateTick = os.clock()
     silentAimLastLead  = lead or 0
     finalAimCore       = core
-    PC.lastLead        = lead or 0
 
     if mode == "Piercer" then
-        local murdererChar = targetPlayer and targetPlayer.Character
-        local oCF = silentAimPiercerOrigin(state, murdererChar)
+        local oCF = silentAimPiercerOrigin(state)
         return oCF, silentAimExtend(oCF.Position, core), core
     end
-
     if mode == "FakeSheriff" then
         local sheriffName, isVisible = checkAllPlayersVisibleMurderer(targetPlayer)
         if isVisible and sheriffName ~= "" then
             local sheriff = Players:FindFirstChild(sheriffName)
-            if sheriff and sheriff ~= targetPlayer and sheriff ~= LocalPlayer then
-                local sHRP = sheriff.Character and sheriff.Character:FindFirstChild(S.HRP)
-                local tHRP = targetPlayer.Character and targetPlayer.Character:FindFirstChild(S.HRP)
-                if sHRP and tHRP and (sHRP.Position - tHRP.Position).Magnitude > 3 then
-                    local originPos = sHRP.Position
-                    return CFrame.new(originPos),
-                           silentAimExtend(originPos, core), core
-                end
+            local sheriffHRP = sheriff and sheriff.Character and sheriff.Character:FindFirstChild(S.HRP)
+            if sheriffHRP then
+                local originPos = sheriffHRP.Position
+                return CFrame.new(originPos), silentAimExtend(originPos, core), core
             end
         end
         return startCFrame, silentAimExtend(startCFrame.Position, core), core
     end
-
     return startCFrame, silentAimExtend(startCFrame.Position, core), core
 end
 
 -- ============================================================
 -- ANTI-TAMPER
 -- ============================================================
-local AT = { tampered = false, refs = {} }
+local AT = { tampered = false, refs = {}, checks = 0, fails = 0 }
+
 AT.refs.Dynamic     = silentAimPredictors.Dynamic
 AT.refs.Piercer     = silentAimPredictors.Piercer
 AT.refs.FakeSheriff = silentAimPredictors.FakeSheriff
 AT.refs.BuildState  = silentAimBuildState
 AT.refs.ResolveShot = silentAimResolveShot
+AT.refs.PiercerOrig = silentAimPiercerOrigin
 AT.refs.WallBlocked = silentAimWallBlocked
 AT.refs.Normalize   = normalizeSilentAimType
+AT.refs.SaFlat      = saFlat
+AT.refs.SaSafeUnit  = saSafeUnit
+AT.refs.Extend      = silentAimExtend
 AT.refs.FleeCheck   = isTargetFleeingFromMe
 AT.refs.CheckVisible= checkAllPlayersVisibleMurderer
 
@@ -756,33 +471,46 @@ local function integrityCheck()
     if type(getgenv) == "function" then
         local ok = pcall(function() return getgenv()[S.ATKey] end)
         local v = ok and getgenv()[S.ATKey] or nil
-        if v ~= S.Beacon then return false end
+        if v ~= S.Beacon then return false, "beacon" end
     end
-    if silentAimPredictors.Dynamic     ~= AT.refs.Dynamic     then return false end
-    if silentAimPredictors.Piercer     ~= AT.refs.Piercer     then return false end
-    if silentAimPredictors.FakeSheriff ~= AT.refs.FakeSheriff then return false end
-    if silentAimBuildState             ~= AT.refs.BuildState  then return false end
-    if silentAimResolveShot            ~= AT.refs.ResolveShot then return false end
-    if silentAimWallBlocked            ~= AT.refs.WallBlocked then return false end
-    if normalizeSilentAimType          ~= AT.refs.Normalize   then return false end
-    if isTargetFleeingFromMe           ~= AT.refs.FleeCheck   then return false end
-    if checkAllPlayersVisibleMurderer  ~= AT.refs.CheckVisible then return false end
-    if type(silentAimTune.leadBase) ~= "number" or silentAimTune.leadBase < 0 or silentAimTune.leadBase > 5 then return false end
-    if type(silentAimTune.leadMax)  ~= "number" or silentAimTune.leadMax  < 0 or silentAimTune.leadMax  > 5 then return false end
-    if type(silentAimTune.serverTickDefault) ~= "number" or silentAimTune.serverTickDefault < 0 or silentAimTune.serverTickDefault > 0.5 then return false end
+    if silentAimPredictors.Dynamic     ~= AT.refs.Dynamic     then return false, "predDynamic" end
+    if silentAimPredictors.Piercer     ~= AT.refs.Piercer     then return false, "predPiercer" end
+    if silentAimPredictors.FakeSheriff ~= AT.refs.FakeSheriff then return false, "predFakeSH" end
+    if silentAimBuildState             ~= AT.refs.BuildState  then return false, "buildState" end
+    if silentAimResolveShot            ~= AT.refs.ResolveShot then return false, "resolve" end
+    if silentAimPiercerOrigin          ~= AT.refs.PiercerOrig then return false, "piercerOrig" end
+    if silentAimWallBlocked            ~= AT.refs.WallBlocked then return false, "wall" end
+    if normalizeSilentAimType          ~= AT.refs.Normalize   then return false, "normalize" end
+    if saFlat                          ~= AT.refs.SaFlat      then return false, "saFlat" end
+    if saSafeUnit                      ~= AT.refs.SaSafeUnit  then return false, "saSafeUnit" end
+    if silentAimExtend                 ~= AT.refs.Extend      then return false, "extend" end
+    if isTargetFleeingFromMe           ~= AT.refs.FleeCheck   then return false, "fleeCheck" end
+    if checkAllPlayersVisibleMurderer  ~= AT.refs.CheckVisible then return false, "checkVisible" end
+    if type(silentAimTune.base) ~= "number" or silentAimTune.base < 0 or silentAimTune.base > 5 then return false, "base" end
+    if type(silentAimTune.maxLead) ~= "number" or silentAimTune.maxLead < 0 or silentAimTune.maxLead > 5 then return false, "maxLead" end
     local modeOK = false
     for _, m in ipairs(SILENT_AIM_MODES) do
         if m == silentAimMode then modeOK = true; break end
     end
-    if not modeOK then return false end
+    if not modeOK then return false, "mode" end
     return true
 end
 
-local function checkAT()
-    if not integrityCheck() then AT.tampered = true end
+local function checkIntegrityNow()
+    AT.checks = AT.checks + 1
+    local ok, reason = integrityCheck()
+    if not ok then
+        AT.fails = AT.fails + 1
+        AT.tampered = true
+        return false, reason
+    end
+    return true
 end
-checkAT()
-task.spawn(function() while task.wait(2) do checkAT() end end)
+do
+    local ok, reason = checkIntegrityNow()
+    if not ok then warn("[AT] initial check failed: " .. tostring(reason)) end
+end
+task.spawn(function() while task.wait(2) do checkIntegrityNow() end end)
 
 -- ============================================================
 -- ROUND / MURDERER
@@ -797,7 +525,8 @@ do
         end
         return require(node)
     end)
-    if ok and r then CurrentRoundClient = r end
+    if ok and r then CurrentRoundClient = r
+    else warn("[Kill] CurrentRoundClient failed") end
 end
 
 local function getMurderer()
@@ -818,7 +547,6 @@ end
 -- HEARTBEAT
 -- ============================================================
 RunService.Heartbeat:Connect(function()
-    updatePing()
     local now = os.clock()
     for _, p in ipairs(Players:GetPlayers()) do
         if p == LocalPlayer then continue end
@@ -839,7 +567,6 @@ RunService.Heartbeat:Connect(function()
         end
         saLastTick[p] = now
         saPushVelSample(p, vel)
-        saPushFleeSample(p, vel)
         local hum = c:FindFirstChildOfClass(S.Humanoid)
         if hum then
             local ok, st = pcall(function() return hum:GetState() end)
@@ -878,52 +605,32 @@ notifGui.DisplayOrder = 1000
 notifGui.Parent = LocalPlayer:WaitForChild(S.PlayerGui)
 
 local function notify(text, color)
-    local card = Instance.new("Frame")
-    card.Size = UDim2.new(0, 260, 0, 42)
-    card.Position = UDim2.new(0.5, -130, 0, -60)
-    card.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
-    card.BackgroundTransparency = 0.05
-    card.Parent = notifGui
-    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 12)
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = color; stroke.Thickness = 1.5; stroke.Transparency = 0.2
-    stroke.Parent = card
-
-    local accentBar = Instance.new("Frame")
-    accentBar.Size = UDim2.new(0, 3, 1, -12)
-    accentBar.Position = UDim2.new(0, 0, 0, 6)
-    accentBar.BackgroundColor3 = color
-    accentBar.BorderSizePixel = 0
-    accentBar.Parent = card
-    Instance.new("UICorner", accentBar).CornerRadius = UDim.new(1, 0)
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -22, 1, 0)
-    label.Position = UDim2.new(0, 14, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = Color3.fromRGB(235, 235, 240)
-    label.Font = Enum.Font.GothamMedium
-    label.TextSize = 13
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = card
-
-    card:TweenPosition(UDim2.new(0.5, -130, 0, 18),
-        Enum.EasingDirection.Out, Enum.EasingStyle.Quart, 0.35, true)
-
-    task.delay(2.5, function()
-        if card and card.Parent then
-            card:TweenPosition(UDim2.new(0.5, -130, 0, -60),
-                Enum.EasingDirection.In, Enum.EasingStyle.Quart, 0.3, true)
-            task.wait(0.35); card:Destroy()
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(0, 240, 0, 34)
+    f.Position = UDim2.new(0.5, -120, 0, -50)
+    f.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    f.BackgroundTransparency = 0.1
+    f.Parent = notifGui
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+    local s = Instance.new("UIStroke"); s.Color = color; s.Thickness = 1.5; s.Parent = f
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, -12, 1, 0)
+    l.Position = UDim2.new(0, 6, 0, 0)
+    l.BackgroundTransparency = 1
+    l.Text = text; l.TextColor3 = color
+    l.Font = Enum.Font.SourceSansBold; l.TextSize = 12
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextTruncate = Enum.TextTruncate.AtEnd
+    l.Parent = f
+    f:TweenPosition(UDim2.new(0.5, -120, 0, 12), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.3, true)
+    task.delay(CONFIG.NotificationDuration, function()
+        if f and f.Parent then
+            f:TweenPosition(UDim2.new(0.5, -120, 0, -50), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.25, true)
+            task.wait(0.3); f:Destroy()
         end
     end)
 end
 
--- ============================================================
--- WATCH TARGET DEATH (with feedback)
--- ============================================================
 local pendingTargets = {}
 local function watchTargetDeath(tp)
     if pendingTargets[tp] then return end
@@ -937,13 +644,11 @@ local function watchTargetDeath(tp)
         if h and h.Health <= 0 then
             pendingTargets[tp] = nil; conn:Disconnect()
             bumpKill()
-            registerHit(PC.lastLead)
-            notify("Killed " .. tp.DisplayName, Color3.fromRGB(70, 200, 120))
+            notify("Killed " .. tp.DisplayName, Color3.fromRGB(60, 200, 90))
             return
         end
         if os.clock() - t0 > CONFIG.KillCheckTime then
             pendingTargets[tp] = nil; conn:Disconnect()
-            registerMiss(PC.lastLead)
         end
     end)
 end
@@ -952,6 +657,7 @@ end
 -- GUN.ACTIVATED → SILENT SHOOT
 -- ============================================================
 local lastShot = 0
+
 local function findShootRemote(gun)
     local direct = gun:FindFirstChild(CONFIG.ShootEventName)
     if direct and direct:IsA("RemoteEvent") then return direct end
@@ -1031,39 +737,8 @@ if LocalPlayer.Character then bindCharacter(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(bindCharacter)
 
 -- ============================================================
--- CACHE RESET
+-- MINI SETTINGS + SHOTS BASE UI
 -- ============================================================
-local function resetPlayerCache(p)
-    saHist[p], saFleeHist[p], saBlend[p] = nil, nil, nil
-    saSmoothVel[p], saSmoothAccel[p]     = nil, nil
-    saLastJump[p], saLastTick[p]         = nil, nil
-end
-
-local function bindReset(p)
-    p.CharacterAdded:Connect(function() resetPlayerCache(p) end)
-end
-for _, plr in ipairs(Players:GetPlayers()) do bindReset(plr) end
-Players.PlayerAdded:Connect(bindReset)
-
--- ============================================================
--- BEAUTIFUL MINI SETTINGS
--- ============================================================
-local PAD, ROW_H, ROW_GAP = 8, 24, 2
-local PANEL_W = 210
-local C = {
-    bg      = Color3.fromRGB(20, 20, 24),
-    card    = Color3.fromRGB(28, 28, 32),
-    stroke  = Color3.fromRGB(60, 60, 70),
-    text    = Color3.fromRGB(228, 228, 234),
-    dim     = Color3.fromRGB(150, 150, 160),
-    accent  = Color3.fromRGB(110, 165, 255),
-    accentD = Color3.fromRGB(65, 100, 180),
-    green   = Color3.fromRGB(60, 190, 130),
-    red     = Color3.fromRGB(200, 70, 75),
-    amber   = Color3.fromRGB(255, 205, 90),
-    off     = Color3.fromRGB(85, 85, 92),
-}
-
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = S.KillMini
 screenGui.ResetOnSpawn = false
@@ -1073,323 +748,178 @@ local old = LocalPlayer:WaitForChild(S.PlayerGui):FindFirstChild(S.KillMini)
 if old then old:Destroy() end
 screenGui.Parent = LocalPlayer.PlayerGui
 
--- gear button
 local gear = Instance.new("TextButton")
-gear.Size = UDim2.new(0, 26, 0, 26)
-gear.Position = UDim2.new(1, -36, 0, 10)
-gear.BackgroundColor3 = C.card
-gear.Text = "⚙"
-gear.TextColor3 = C.accent
-gear.TextSize = 14
-gear.Font = Enum.Font.GothamBold
-gear.AutoButtonColor = false
+gear.Size = UDim2.new(0, 22, 0, 22)
+gear.Position = UDim2.new(1, -32, 0, 8)
+gear.BackgroundColor3 = Color3.fromRGB(30,30,30)
+gear.Text = "⚙"; gear.TextColor3 = Color3.fromRGB(220,220,220)
+gear.TextSize = 12; gear.Font = Enum.Font.SourceSansBold
 gear.Parent = screenGui
 Instance.new("UICorner", gear).CornerRadius = UDim.new(1, 0)
-local gStroke = Instance.new("UIStroke")
-gStroke.Color = C.stroke; gStroke.Thickness = 1.5
-gStroke.Parent = gear
-
-gear.MouseEnter:Connect(function()
-    TweenService:Create(gear, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(40,40,48)}):Play()
-end)
-gear.MouseLeave:Connect(function()
-    TweenService:Create(gear, TweenInfo.new(0.15), {BackgroundColor3 = C.card}):Play()
-end)
+local gs = Instance.new("UIStroke"); gs.Color = Color3.fromRGB(90,90,90); gs.Thickness = 1.5
+gs.Parent = gear
 
 local mini = Instance.new("Frame")
-mini.Size = UDim2.new(0, PANEL_W, 0, 100)
-mini.Position = UDim2.new(1, -PANEL_W - 20, 0, 44)
-mini.BackgroundColor3 = C.bg
+mini.Size = UDim2.new(0, 170, 0, 200)
+mini.Position = UDim2.new(1, -180, 0, 36)
+mini.BackgroundColor3 = Color3.fromRGB(18,18,18)
 mini.Visible = false
-mini.Active = true
-mini.ClipsDescendants = true
 mini.Parent = screenGui
-Instance.new("UICorner", mini).CornerRadius = UDim.new(0, 12)
-local mStroke = Instance.new("UIStroke")
-mStroke.Color = C.stroke; mStroke.Thickness = 1.5
-mStroke.Parent = mini
+Instance.new("UICorner", mini).CornerRadius = UDim.new(0, 6)
+local ms = Instance.new("UIStroke"); ms.Color = Color3.fromRGB(70,70,70); ms.Thickness = 1.5
+ms.Parent = mini
 
-local header = Instance.new("Frame")
-header.Size = UDim2.new(1, 0, 0, 32)
-header.BackgroundTransparency = 1
-header.Parent = mini
+local PAD, ROW_H, STEP = 5, 16, 18
 
-local accentDot = Instance.new("Frame")
-accentDot.Size = UDim2.new(0, 8, 0, 8)
-accentDot.Position = UDim2.new(0, PAD, 0.5, -4)
-accentDot.BackgroundColor3 = C.accent
-accentDot.Parent = header
-Instance.new("UICorner", accentDot).CornerRadius = UDim.new(1, 0)
-
-local headerTitle = Instance.new("TextLabel")
-headerTitle.Size = UDim2.new(1, -PAD*2 - 16, 1, 0)
-headerTitle.Position = UDim2.new(0, PAD + 14, 0, 0)
-headerTitle.BackgroundTransparency = 1
-headerTitle.Text = "SHOOTER SLOP"
-headerTitle.TextColor3 = C.accent
-headerTitle.TextXAlignment = Enum.TextXAlignment.Left
-headerTitle.Font = Enum.Font.GothamBold
-headerTitle.TextSize = 11
-headerTitle.Parent = header
-
-local topSep = Instance.new("Frame")
-topSep.Size = UDim2.new(1, -PAD*2, 0, 1)
-topSep.Position = UDim2.new(0, PAD, 0, 32)
-topSep.BackgroundColor3 = C.stroke
-topSep.BorderSizePixel = 0
-topSep.BackgroundTransparency = 0.5
-topSep.Parent = mini
-
-local Y = 40
-
-local function sectionHeader(text, accent)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -PAD*2, 0, 14)
-    row.Position = UDim2.new(0, PAD, 0, Y)
-    row.BackgroundTransparency = 1
-    row.Parent = mini
-
-    local dot = Instance.new("Frame")
-    dot.Size = UDim2.new(0, 6, 0, 6)
-    dot.Position = UDim2.new(0, 0, 0.5, -3)
-    dot.BackgroundColor3 = accent or C.accent
-    dot.Parent = row
-    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -10, 1, 0)
-    lbl.Position = UDim2.new(0, 12, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = text
-    lbl.TextColor3 = accent or C.accent
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Font = Enum.Font.GothamBold
-    lbl.TextSize = 9
-    lbl.Parent = row
-
-    Y = Y + 16
+local function lbl(text, y, color)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, -PAD*2, 0, 14)
+    l.Position = UDim2.new(0, PAD, 0, y)
+    l.BackgroundTransparency = 1
+    l.Text = text; l.TextColor3 = color or Color3.fromRGB(220,220,220)
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Font = Enum.Font.SourceSansBold; l.TextSize = 10
+    l.Parent = mini
+    return l
 end
 
-local function toggle(text, getter, setter)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -PAD*2, 0, ROW_H)
-    row.Position = UDim2.new(0, PAD, 0, Y)
-    row.BackgroundColor3 = C.card
-    row.Parent = mini
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -60, 1, 0)
-    lbl.Position = UDim2.new(0, 10, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = text
-    lbl.TextColor3 = C.text
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Font = Enum.Font.GothamMedium
-    lbl.TextSize = 11
-    lbl.Parent = row
-
-    local pill = Instance.new("Frame")
-    pill.Size = UDim2.new(0, 34, 0, 16)
-    pill.Position = UDim2.new(1, -42, 0.5, -8)
-    pill.BackgroundColor3 = getter() and C.green or C.off
-    pill.Parent = row
-    Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
-
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 12, 0, 12)
-    knob.Position = getter() and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
-    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    knob.Parent = pill
-    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.fromScale(1, 1)
-    btn.BackgroundTransparency = 1
-    btn.Text = ""
-    btn.Parent = row
-
-    btn.Activated:Connect(function()
-        local new = not getter()
-        setter(new)
-        pill.BackgroundColor3 = new and C.green or C.off
-        TweenService:Create(knob, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {
-            Position = new and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
-        }):Play()
+local function toggle(text, y, getter, setter)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -PAD*2, 0, ROW_H)
+    b.Position = UDim2.new(0, PAD, 0, y)
+    b.BackgroundColor3 = getter() and Color3.fromRGB(60,140,80) or Color3.fromRGB(140,50,50)
+    b.Text = text .. ": " .. (getter() and "ON" or "OFF")
+    b.TextColor3 = Color3.fromRGB(255,255,255)
+    b.Font = Enum.Font.SourceSansBold; b.TextSize = 10
+    b.Parent = mini
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 3)
+    b.Activated:Connect(function()
+        local ok, cur = pcall(getter); if not ok then return end
+        pcall(setter, not cur)
+        local ok2, nv = pcall(getter); if not ok2 then return end
+        b.BackgroundColor3 = nv and Color3.fromRGB(60,140,80) or Color3.fromRGB(140,50,50)
+        b.Text = text .. ": " .. (nv and "ON" or "OFF")
     end)
-
-    Y = Y + ROW_H + ROW_GAP
 end
 
-local function adj(label, getter, setter, step, fmt)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -PAD*2, 0, ROW_H)
-    row.Position = UDim2.new(0, PAD, 0, Y)
-    row.BackgroundColor3 = C.card
-    row.Parent = mini
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(0, 80, 1, 0)
-    lbl.Position = UDim2.new(0, 10, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = label
-    lbl.TextColor3 = C.text
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Font = Enum.Font.GothamMedium
-    lbl.TextSize = 11
-    lbl.Parent = row
-
-    local val = Instance.new("TextLabel")
-    val.Size = UDim2.new(0, 52, 1, 0)
-    val.Position = UDim2.new(1, -52-24-24-4, 0, 0)
-    val.BackgroundTransparency = 1
-    val.Text = fmt(getter())
-    val.TextColor3 = C.amber
-    val.Font = Enum.Font.GothamBold
-    val.TextSize = 10
-    val.TextXAlignment = Enum.TextXAlignment.Center
-    val.Parent = row
-
-    local function mkBtn(sym, xOff, bg)
+local function adj(label, y, getter, setter, step, fmt)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(0.55, -PAD, 0, ROW_H)
+    l.Position = UDim2.new(0, PAD, 0, y)
+    l.BackgroundTransparency = 1
+    l.Text = label; l.TextColor3 = Color3.fromRGB(220,220,220)
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Font = Enum.Font.SourceSansBold; l.TextSize = 10
+    l.Parent = mini
+    local v = Instance.new("TextLabel")
+    v.Size = UDim2.new(0, 46, 0, ROW_H)
+    v.Position = UDim2.new(1, -PAD - 16*2 - 46 - 2, 0, y)
+    v.BackgroundColor3 = Color3.fromRGB(35,35,35)
+    v.Text = fmt(getter()); v.TextColor3 = Color3.fromRGB(255,220,100)
+    v.Font = Enum.Font.SourceSansBold; v.TextSize = 9
+    v.Parent = mini
+    Instance.new("UICorner", v).CornerRadius = UDim.new(0, 2)
+    local function apply(delta)
+        local ok, cur = pcall(getter)
+        if not ok or type(cur) ~= "number" then return end
+        local nv = cur + delta
+        if nv < 0 then nv = 0 end
+        pcall(setter, nv)
+        local ok2, nv2 = pcall(getter)
+        if ok2 and type(nv2) == "number" then v.Text = fmt(nv2) end
+    end
+    local function mk(txt, xoff, bg)
         local b = Instance.new("TextButton")
-        b.Size = UDim2.new(0, 20, 0, 20)
-        b.Position = UDim2.new(1, xOff, 0.5, -10)
+        b.Size = UDim2.new(0, 16, 0, 16)
+        b.Position = UDim2.new(1, -PAD + xoff, 0, y)
         b.BackgroundColor3 = bg
-        b.Text = sym
-        b.TextColor3 = Color3.fromRGB(255,255,255)
-        b.Font = Enum.Font.GothamBold
-        b.TextSize = 14
-        b.AutoButtonColor = false
-        b.Parent = row
-        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
-        b.MouseEnter:Connect(function()
-            TweenService:Create(b, TweenInfo.new(0.1), {BackgroundColor3 = bg:Lerp(Color3.new(1,1,1), 0.15)}):Play()
-        end)
-        b.MouseLeave:Connect(function()
-            TweenService:Create(b, TweenInfo.new(0.1), {BackgroundColor3 = bg}):Play()
-        end)
+        b.Text = txt; b.TextColor3 = Color3.fromRGB(255,255,255)
+        b.Font = Enum.Font.SourceSansBold; b.TextSize = 12
+        b.Parent = mini
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 2)
         return b
     end
-    local minus = mkBtn("−", -52, C.red)
-    local plus  = mkBtn("+", -28, C.green)
-
-    minus.Activated:Connect(function()
-        local v = math.max(0, getter() - step)
-        setter(v); val.Text = fmt(getter())
-    end)
-    plus.Activated:Connect(function()
-        setter(getter() + step); val.Text = fmt(getter())
-    end)
-
-    Y = Y + ROW_H + ROW_GAP
+    local mn = mk("−", -(16*2 + 2), Color3.fromRGB(100,40,40))
+    local pl = mk("+", -16, Color3.fromRGB(40,100,60))
+    mn.Activated:Connect(function() apply(-step) end)
+    pl.Activated:Connect(function() apply( step) end)
 end
+
+lbl("SILENT AIM", 4, Color3.fromRGB(255,220,100))
 
 local modeBtn = Instance.new("TextButton")
 modeBtn.Size = UDim2.new(1, -PAD*2, 0, ROW_H)
-modeBtn.Position = UDim2.new(0, PAD, 0, Y)
-modeBtn.BackgroundColor3 = C.accentD
-modeBtn.Text = "Mode · " .. silentAimMode
+modeBtn.Position = UDim2.new(0, PAD, 0, 20)
+modeBtn.BackgroundColor3 = Color3.fromRGB(50,100,160)
+modeBtn.Text = "Mode: " .. silentAimMode
 modeBtn.TextColor3 = Color3.fromRGB(255,255,255)
-modeBtn.Font = Enum.Font.GothamBold
-modeBtn.TextSize = 11
-modeBtn.AutoButtonColor = false
+modeBtn.Font = Enum.Font.SourceSansBold; modeBtn.TextSize = 10
 modeBtn.Parent = mini
-Instance.new("UICorner", modeBtn).CornerRadius = UDim.new(0, 7)
-local modeGrad = Instance.new("UIGradient")
-modeGrad.Color = ColorSequence.new{
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 140, 230)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(55, 90, 175)),
-}
-modeGrad.Rotation = 90
-modeGrad.Parent = modeBtn
-
+Instance.new("UICorner", modeBtn).CornerRadius = UDim.new(0, 3)
 modeBtn.Activated:Connect(function()
     local idx = 1
     for i, m in ipairs(SILENT_AIM_MODES) do if m == silentAimMode then idx = i; break end end
     idx = idx % #SILENT_AIM_MODES + 1
     silentAimMode = SILENT_AIM_MODES[idx]
-    modeBtn.Text = "Mode · " .. silentAimMode
+    modeBtn.Text = "Mode: " .. silentAimMode
 end)
 
-Y = Y + ROW_H + 6
+local Y = 40
+local function row() local y = Y; Y = Y + STEP; return y end
 
--- ============ sections ============
-sectionHeader("SILENT AIM", C.accent)
-toggle("Predict",    function() return CONFIG.PredictionEnabled end, function(v) CONFIG.PredictionEnabled = v end)
-toggle("Wall Check", function() return CONFIG.WallCheck end,         function(v) CONFIG.WallCheck = v end)
-toggle("Flee Fix",   function() return FLEE_OFFSET_X > 0 end,
+toggle("Predict", row(), function() return CONFIG.PredictionEnabled end, function(v) CONFIG.PredictionEnabled = v end)
+toggle("Wall Check", row(), function() return CONFIG.WallCheck end, function(v) CONFIG.WallCheck = v end)
+toggle("Flee Fix", row(),
+    function() return FLEE_OFFSET_X > 0 end,
     function(v)
         if v then FLEE_OFFSET_X, FLEE_OFFSET_Y = 2.0, 1.0
         else FLEE_OFFSET_X, FLEE_OFFSET_Y = 0.0, 0.0 end
     end)
-
-Y = Y + 4
-sectionHeader("TUNING", Color3.fromRGB(180, 140, 255))
-adj("leadBase",  function() return silentAimTune.leadBase end,  function(v) silentAimTune.leadBase = v end,
-    0.005, function(v) return string.format("%dms", math.floor(v*1000+0.5)) end)
-adj("leadMax",   function() return silentAimTune.leadMax end,   function(v) silentAimTune.leadMax = v end,
-    0.02,  function(v) return string.format("%dms", math.floor(v*1000+0.5)) end)
-adj("srvTick",   function() return silentAimTune.serverTickDefault end, function(v) silentAimTune.serverTickDefault = v end,
-    0.005, function(v) return string.format("%dms", math.floor(v*1000+0.5)) end)
-adj("intent",    function() return silentAimTune.intentBlend end, function(v) silentAimTune.intentBlend = v end,
+adj("base", row(), function() return silentAimTune.base end, function(v) silentAimTune.base = v end,
+    0.01, function(v) return string.format("%dms", math.floor(v*1000+0.5)) end)
+adj("maxLead", row(), function() return silentAimTune.maxLead end, function(v) silentAimTune.maxLead = v end,
+    0.02, function(v) return string.format("%dms", math.floor(v*1000+0.5)) end)
+adj("intent", row(), function() return silentAimTune.intentBlend end, function(v) silentAimTune.intentBlend = v end,
     0.05, function(v) return string.format("%d%%", math.floor(v*100+0.5)) end)
-adj("blendSm",   function() return silentAimTune.blendSmooth end, function(v) silentAimTune.blendSmooth = v end,
-    0.05, function(v) return string.format("%d%%", math.floor(v*100+0.5)) end)
-adj("overshoot", function() return silentAimOvershoot end,       function(v) silentAimOvershoot = v end,
+adj("overshoot", row(), function() return silentAimOvershoot end, function(v) silentAimOvershoot = v end,
     1, function(v) return string.format("%d", math.floor(v+0.5)) end)
-adj("pierceBk",  function() return silentAimPiercerBack end,     function(v) silentAimPiercerBack = v end,
+adj("piercerBack", row(), function() return silentAimPiercerBack end, function(v) silentAimPiercerBack = v end,
     1, function(v) return string.format("%d", math.floor(v+0.5)) end)
-adj("fleeX",     function() return FLEE_OFFSET_X end,            function(v) FLEE_OFFSET_X = v end,
+adj("fleeX", row(), function() return FLEE_OFFSET_X end, function(v) FLEE_OFFSET_X = v end,
     0.5, function(v) return string.format("%.1f", v) end)
-adj("fleeY",     function() return FLEE_OFFSET_Y end,            function(v) FLEE_OFFSET_Y = v end,
+adj("fleeY", row(), function() return FLEE_OFFSET_Y end, function(v) FLEE_OFFSET_Y = v end,
     0.5, function(v) return string.format("%.1f", v) end)
-adj("SH_range",  function() return FAKE_SH_SIGHT_RANGE end,      function(v) FAKE_SH_SIGHT_RANGE = v end,
+adj("SH_range", row(), function() return FAKE_SH_SIGHT_RANGE end, function(v) FAKE_SH_SIGHT_RANGE = v end,
     25, function(v) return string.format("%d", math.floor(v+0.5)) end)
 
-Y = Y + 4
-sectionHeader("SHOTS BASE", Color3.fromRGB(120, 220, 160))
-
-local statsCard = Instance.new("Frame")
-statsCard.Size = UDim2.new(1, -PAD*2, 0, 40)
-statsCard.Position = UDim2.new(0, PAD, 0, Y)
-statsCard.BackgroundColor3 = C.card
-statsCard.Parent = mini
-Instance.new("UICorner", statsCard).CornerRadius = UDim.new(0, 7)
+local statsTitle = lbl("Shots Base", Y, Color3.fromRGB(160, 220, 255)); Y = Y + 14
 
 local statsLbl = Instance.new("TextLabel")
-statsLbl.Size = UDim2.new(1, -16, 1, 0)
-statsLbl.Position = UDim2.new(0, 10, 0, 0)
-statsLbl.BackgroundTransparency = 1
-statsLbl.Text = "shots · 0   kills · 0"
-statsLbl.TextColor3 = C.dim
-statsLbl.Font = Enum.Font.GothamMedium
+statsLbl.Size = UDim2.new(1, -PAD*2, 0, 28)
+statsLbl.Position = UDim2.new(0, PAD, 0, Y); Y = Y + 30
+statsLbl.BackgroundColor3 = Color3.fromRGB(22,22,22)
+statsLbl.Text = "shots: 0\nkills: 0"
+statsLbl.TextColor3 = Color3.fromRGB(220,220,220)
+statsLbl.Font = Enum.Font.SourceSansBold
 statsLbl.TextSize = 10
 statsLbl.TextXAlignment = Enum.TextXAlignment.Left
-statsLbl.TextYAlignment = Enum.TextYAlignment.Center
-statsLbl.Parent = statsCard
-
-Y = Y + 40 + 10
+statsLbl.TextYAlignment = Enum.TextYAlignment.Top
+statsLbl.Parent = mini
+Instance.new("UICorner", statsLbl).CornerRadius = UDim.new(0, 3)
 
 updateShotsBaseUI = function()
-    statsLbl.Text = string.format("shots · %d  (+%d)   kills · %d  (+%d)",
+    statsLbl.Text = string.format("shots: %d (+%d)\nkills: %d (+%d)",
         totalShots, pendingShots, totalKills, pendingKills)
 end
 updateShotsBaseUI()
 
-mini.Size = UDim2.new(0, PANEL_W, 0, Y + 6)
+mini.Size = UDim2.new(0, 170, 0, Y + 6)
 
-gear.Activated:Connect(function()
-    mini.Visible = not mini.Visible
-    if mini.Visible then
-        TweenService:Create(mini, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-            {BackgroundTransparency = 0}):Play()
-    end
-end)
+gear.Activated:Connect(function() mini.Visible = not mini.Visible end)
 
 Players.PlayerRemoving:Connect(function(p)
-    resetPlayerCache(p)
-    pendingTargets[p] = nil
+    saHist[p], saSmoothVel[p], saSmoothAccel[p] = nil, nil, nil
+    saLastJump[p], saLastTick[p], pendingTargets[p] = nil, nil, nil
 end)
 
-print("[Shooter Slop] Loaded · Predict Core v10 · Gun.Activated → silent aim")
+print("[Shooter Slop] Loaded. Gun.Activated → silent aim.")
