@@ -1,8 +1,11 @@
 --!nonstrict
 --[[
     Shooter Slop — By Poor Slop AI
-    Gun.Activated edition  |  full VM prediction module (12 sections)
-    No hookfunction / hookmetamethod. Original Activated handlers disabled via getconnections.
+    Gun.Activated edition  |  full VM prediction (fixed)
+    Fixes vs previous:
+      1) PredictPath(targetPos, ...) — snap-to-ground от цели, не от стрелка
+      2) ctx.Vertical = {0,0,nil} — не дублируем вертикаль с velocity
+      3) ctx.Samples из Heartbeat 60Hz (saHist) — turn/accel работают на реальных данных
 ]]
 
 local Players           = game:GetService("Players")
@@ -304,11 +307,10 @@ local function silentAimBuildState(player)
 end
 
 -- ============================================================
--- PREDICTORS
+-- PREDICTORS (Simple + Dynamic)
 -- ============================================================
 local silentAimPredictors = {}
 
--- AryslanHUB formula
 silentAimPredictors.Simple = function(s, t, player, _origin)
     t = t or silentAimTune
     local char = player and player.Character
@@ -364,7 +366,7 @@ silentAimPredictors.Dynamic = function(s, t, player, _origin)
 end
 
 -- ============================================================
--- FULL VM PREDICTION MODULE (all 12 sections)
+-- FULL VM PREDICTION MODULE (12 sections, fixed)
 -- ============================================================
 local Vec = Vector3.new
 local vclamp = math.clamp
@@ -419,6 +421,7 @@ function Prediction:GetPredictionTime(ctx, t, prov)
     return vclamp(rtt + self.InterpolationDelay + lead, 0, self.MaxPredictionTime)
 end
 
+-- ⭐ FIX 1: origin теперь = targetPos (для snap-to-ground относительно цели)
 function Prediction:PredictPath(origin, direction, v, gravity, dt, hh)
     if dt <= 0 then return Vec(0,0,0), nil end
     local g   = gravity or 0
@@ -485,7 +488,8 @@ function Prediction:PredictOffset(ctx, now, dt, origin, dir, velocity, targetPos
     end
 
     -- 5.2 ballistic + snap
-    local arc, groundY = self:PredictPath(origin, dir, velocity, gravity, dt, hh)
+    -- ⭐ FIX 1: PredictPath относительно targetPos (а не стрелка)
+    local arc, groundY = self:PredictPath(targetPos, dir, velocity, gravity, dt, hh)
     local Rg = ctx.GroundY
     if Rg and groundY and (now - (ctx.GroundAt or 0)) < LAND_WINDOW
        and _abs(targetPos.Y - Rg) < LAND_Y_TOL
@@ -529,7 +533,7 @@ function Prediction:PredictOffset(ctx, now, dt, origin, dir, velocity, targetPos
     if dt <= 0 then return arc, flag end
     if not self:IsTargetGrounded(targetPos) then return arc, flag end
 
-    -- 5.6 ensemble bootstrap
+    -- 5.6 ensemble
     local experts = ctx.Experts
     if not experts then
         experts = {
@@ -647,10 +651,10 @@ function Prediction:PredictOffset(ctx, now, dt, origin, dir, velocity, targetPos
         final = bestP
     end
 
-    -- 5.11 final offset
+    -- 5.11 final
     local J = Vec(final.X - R.X, arc.Y, final.Z - R.Z)
 
-    -- 5.12 record for calibration
+    -- 5.12 record
     if now - experts.RecordAt >= REC_INTERVAL then
         experts.RecordAt = now
         local rec = {
@@ -688,7 +692,7 @@ function Prediction.new(opts)
 end
 
 -- ============================================================
--- VM Predictor wrapper
+-- VM wrapper (all 3 fixes applied)
 -- ============================================================
 local vmPrediction = Prediction.new()
 local vmContexts = {}
@@ -725,25 +729,36 @@ silentAimPredictors.VM = function(s, t, player, origin)
     ctx.Gravity  = workspace.Gravity
     ctx.GroundY  = s.floorY or (s.pos.Y - (s.standHeight or 3))
     if s.floorY then ctx.GroundAt = now end
-    ctx.Vertical = {
-        Velocity = s.vel.Y,
-        Gravity  = -workspace.Gravity,
-        LandAt   = (s.vel.Y > 0) and (now + 2 * s.vel.Y / workspace.Gravity) or nil,
-    }
 
+    -- ⭐ FIX 2: Vertical = 0, не дублируем velocity через gravity
+    ctx.Vertical = { Velocity = 0, Gravity = 0, LandAt = nil }
+
+    -- ⭐ FIX 3: Samples из Heartbeat (60Hz), не one-per-shot
+    local h = saHist[player]
+    if h and #h > 0 then
+        local arr = {}
+        for i, smp in ipairs(h) do
+            arr[i] = { Time = smp[1], Raw = Vector3.new(smp[2], smp[3], smp[4]) }
+        end
+        ctx.Samples = arr
+    else
+        ctx.Samples = ctx.Samples or {}
+    end
+
+    -- Turn stats from real samples
     ctx.TurnSamples = #ctx.Samples
     ctx.TurnRate, ctx.TurnVariance = 0, 0
-    if #ctx.Samples >= 2 then
-        local a = ctx.Samples[#ctx.Samples]
-        local b = ctx.Samples[math.max(1, #ctx.Samples - 5)]
-        if a and b then
-            local dtAB = a.Time - b.Time
-            if dtAB > 0.02 and a.Raw.Magnitude > 1 and b.Raw.Magnitude > 1 then
-                ctx.TurnRate = math.acos(math.clamp(a.Raw.Unit:Dot(b.Raw.Unit), -1, 1)) / dtAB
-            end
+    if #ctx.Samples >= 6 then
+        local lastIdx = #ctx.Samples
+        local prevIdx = math.max(1, lastIdx - 5)
+        local a = ctx.Samples[lastIdx]
+        local b = ctx.Samples[prevIdx]
+        local dtAB = a.Time - b.Time
+        if dtAB > 0.02 and dtAB < 0.15 and a.Raw.Magnitude > 1 and b.Raw.Magnitude > 1 then
+            ctx.TurnRate = math.acos(math.clamp(a.Raw.Unit:Dot(b.Raw.Unit), -1, 1)) / dtAB
         end
         local angles = {}
-        for i = math.max(1, #ctx.Samples - 8), #ctx.Samples do
+        for i = math.max(1, lastIdx - 8), lastIdx do
             local smp = ctx.Samples[i]
             if smp and smp.Raw.Magnitude > 0.5 then
                 angles[#angles+1] = math.atan2(smp.Raw.Z, smp.Raw.X)
@@ -751,17 +766,12 @@ silentAimPredictors.VM = function(s, t, player, origin)
         end
         if #angles > 1 then
             local mean = 0
-            for _, a in ipairs(angles) do mean = mean + a end
+            for _, av in ipairs(angles) do mean = mean + av end
             mean = mean / #angles
             local var = 0
-            for _, a in ipairs(angles) do var = var + (a - mean)*(a - mean) end
+            for _, av in ipairs(angles) do var = var + (av - mean) * (av - mean) end
             ctx.TurnVariance = var / #angles
         end
-    end
-
-    table.insert(ctx.Samples, { Time = now, Raw = s.vel })
-    while #ctx.Samples > 90 and (now - ctx.Samples[1].Time) > 1.5 do
-        table.remove(ctx.Samples, 1)
     end
 
     if s.speed > 0.5 then ctx.MoveSince = ctx.MoveSince or now
@@ -868,7 +878,7 @@ local function getMurderer()
 end
 
 -- ============================================================
--- HEARTBEAT (velocity history)
+-- HEARTBEAT (velocity history for VM)
 -- ============================================================
 RunService.Heartbeat:Connect(function()
     local now = os.clock()
@@ -1210,7 +1220,7 @@ Players.PlayerRemoving:Connect(function(p)
 end)
 
 if type(getconnections) ~= "function" then
-    warn("[Shooter Slop] getconnections недоступен — возможен двойной выстрел (наш + игры)")
+    warn("[Shooter Slop] getconnections недоступен — возможен двойной выстрел")
 end
 
-print("[Shooter Slop] Loaded. Gun.Activated mode | Full VM predictor | Mode: "..silentAimMode)
+print("[Shooter Slop] Loaded | VM: PredictPath@targetPos, Vertical=0, Samples@60Hz | Mode: "..silentAimMode)
