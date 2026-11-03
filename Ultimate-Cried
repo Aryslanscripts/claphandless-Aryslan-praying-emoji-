@@ -1,60 +1,46 @@
+--!nonstrict
 --[[
-    Shooter Slop — AutoPredict Only (Smart)
-    Gun.Activated → silent aim shoot (без __namecall hook).
-    Единственный режим: AutoPredict.
-        air       → Full (баллистика)
-        sitting   → прямое наведение
-        манёвренность < 0.15  → Dynamic
-        манёвренность > 0.85  → Adaptive
-        иначе     → плавный блендинг Dynamic↔Adaptive
-    + Flee Fix + Anti-Tamper. Shots Base: Firebase.
+    Shooter Slop — By Poor Slop AI
+    Gun.Activated edition  |  full VM prediction module (12 sections)
+    No hookfunction / hookmetamethod. Original Activated handlers disabled via getconnections.
 ]]
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 local TweenService      = game:GetService("TweenService")
-local CollectionService = game:GetService("CollectionService")
 local HttpService       = game:GetService("HttpService")
+local Stats             = game:GetService("Stats")
+local Workspace         = game:GetService("Workspace")
 local LocalPlayer       = Players.LocalPlayer
 
 -- ============================================================
 -- STRING.CHAR CONSTANTS
 -- ============================================================
 local S = {
-    Gun          = string.char(71,117,110),
-    Shoot        = string.char(83,104,111,111,116),
-    KnifeLocal   = string.char(75,110,105,102,101,76,111,99,97,108),
-    HRP          = string.char(72,117,109,97,110,111,105,100,82,111,111,116,80,97,114,116),
-    Head         = string.char(72,101,97,100),
-    Humanoid     = string.char(72,117,109,97,110,111,105,100),
-    RightHand    = string.char(82,105,103,104,116,72,97,110,100),
-    RightArm     = string.char(82,105,103,104,116,32,65,114,109),
-    PassThrough  = string.char(87,101,97,112,111,110,80,97,115,115,116,104,114,111,117,103,104),
-    Murderer     = string.char(77,117,114,100,101,114,101,114),
-    Role         = string.char(82,111,108,101),
-    Modules      = string.char(77,111,100,117,108,101,115),
-    CRC          = string.char(67,117,114,114,101,110,116,82,111,117,110,100,67,108,105,101,110,116),
-    KillHooked   = string.char(75,105,108,108,72,111,111,107,101,100),
-    KillMini     = string.char(75,105,108,108,77,105,110,105),
-    KillNotif    = string.char(75,105,108,108,78,111,116,105,102),
-    Splash       = string.char(83,112,108,97,115,104,83,104,111,111,116,101,114,83,108,111,112),
-    PlayerGui    = string.char(80,108,97,121,101,114,71,117,105),
-    Beacon       = string.char(83,83,95,65,84,95,57,102,50,97,95,120,56,51),
-    ATKey        = string.char(95,95,83,83,95,65,84,95,75,69,89),
-    FB_URL       = string.char(
-        104,116,116,112,115,58,47,47,
-        115,104,111,111,116,45,97,114,121,115,108,97,110,104,117,98,
-        45,98,101,115,116,45,112,114,101,100,105,99,116,
-        45,100,101,102,97,117,108,116,
-        45,114,116,100,98,
-        46,101,117,114,111,112,101,45,119,101,115,116,49,
-        46,102,105,114,101,98,97,115,101,100,97,116,97,98,97,115,101,
-        46,97,112,112),
+    Gun = string.char(71,117,110), Shoot = string.char(83,104,111,111,116),
+    KnifeLocal = string.char(75,110,105,102,101,76,111,99,97,108),
+    HRP = string.char(72,117,109,97,110,111,105,100,82,111,111,116,80,97,114,116),
+    Head = string.char(72,101,97,100), Humanoid = string.char(72,117,109,97,110,111,105,100),
+    RightHand = string.char(82,105,103,104,116,72,97,110,100),
+    RightArm = string.char(82,105,103,104,116,32,65,114,109),
+    UpperTorso = string.char(85,112,112,101,114,84,111,114,115,111),
+    Torso = string.char(84,111,114,115,111),
+    PassThrough = string.char(87,101,97,112,111,110,80,97,115,115,116,104,114,111,117,103,104),
+    Murderer = string.char(77,117,114,100,101,114,101,114),
+    Role = string.char(82,111,108,101), Modules = string.char(77,111,100,117,108,101,115),
+    CRC = string.char(67,117,114,114,101,110,116,82,111,117,110,100,67,108,105,101,110,116),
+    KillHooked = string.char(75,105,108,108,72,111,111,107,101,100),
+    KillMini = string.char(75,105,108,108,77,105,110,105),
+    KillNotif = string.char(75,105,108,108,78,111,116,105,102),
+    Splash = string.char(83,112,108,97,115,104,83,104,111,111,116,101,114,83,108,111,112),
+    PlayerGui = string.char(80,108,97,121,101,114,71,117,105),
+    Beacon = string.char(83,83,95,65,84,95,57,102,50,97,95,120,56,51),
+    ATKey = string.char(95,95,83,83,95,65,84,95,75,69,89),
+    FB_URL = string.char(104,116,116,112,115,58,47,47,115,104,111,111,116,45,97,114,121,115,108,97,110,104,117,98,45,98,101,115,116,45,112,114,101,100,105,99,116,45,100,101,102,97,117,108,116,45,114,116,100,98,46,101,117,114,111,112,101,45,119,101,115,116,49,46,102,105,114,101,98,97,115,101,100,97,116,97,98,97,115,101,46,97,112,112),
     FB_JSON_PATH = string.char(47,46,106,115,111,110),
-    FB_GET       = string.char(71,69,84),
-    FB_PUT       = string.char(80,85,84),
-    FB_NULL      = string.char(110,117,108,108),
+    FB_GET = string.char(71,69,84), FB_PUT = string.char(80,85,84),
+    FB_NULL = string.char(110,117,108,108),
     FB_KEY_SHOTS = string.char(83,104,111,111,116,101,100),
     FB_KEY_KILLS = string.char(83,117,99,99,101,115,115,102,117,108,108,121,75,105,108,108,101,100),
     FB_CTYPE_KEY = string.char(67,111,110,116,101,110,116,45,84,121,112,101),
@@ -64,10 +50,8 @@ local S = {
 -- ============================================================
 -- SHOTS BASE
 -- ============================================================
-local pendingShots, pendingKills = 0, 0
-local totalShots, totalKills = 0, 0
+local pendingShots, pendingKills, totalShots, totalKills = 0, 0, 0, 0
 local updateShotsBaseUI = nil
-
 local function shotsBaseFlush()
     if pendingShots <= 0 and pendingKills <= 0 then return end
     local shots, kills = pendingShots, pendingKills
@@ -75,113 +59,92 @@ local function shotsBaseFlush()
         local get = HttpService:RequestAsync({ Url = S.FB_URL .. S.FB_JSON_PATH, Method = S.FB_GET })
         local data = {}
         if get.Success and get.Body ~= S.FB_NULL and get.Body ~= "" then
-            local ok, decoded = pcall(HttpService.JSONDecode, HttpService, get.Body)
-            if ok and type(decoded) == "table" then data = decoded end
+            local ok, dec = pcall(HttpService.JSONDecode, HttpService, get.Body)
+            if ok and type(dec) == "table" then data = dec end
         end
-        local newShots = (tonumber(data[S.FB_KEY_SHOTS]) or 0) + shots
-        local newKills = (tonumber(data[S.FB_KEY_KILLS]) or 0) + kills
+        local ns = (tonumber(data[S.FB_KEY_SHOTS]) or 0) + shots
+        local nk = (tonumber(data[S.FB_KEY_KILLS]) or 0) + kills
         local put = HttpService:RequestAsync({
             Url = S.FB_URL .. S.FB_JSON_PATH, Method = S.FB_PUT,
             Headers = { [S.FB_CTYPE_KEY] = S.FB_CTYPE_VAL },
-            Body = HttpService:JSONEncode({
-                [S.FB_KEY_SHOTS] = newShots,
-                [S.FB_KEY_KILLS] = newKills,
-            }),
+            Body = HttpService:JSONEncode({ [S.FB_KEY_SHOTS]=ns, [S.FB_KEY_KILLS]=nk }),
         })
         if put.Success then
-            pendingShots = pendingShots - shots
-            pendingKills = pendingKills - kills
-            totalShots = newShots
-            totalKills = newKills
+            pendingShots -= shots; pendingKills -= kills
+            totalShots, totalKills = ns, nk
             if updateShotsBaseUI then updateShotsBaseUI() end
         end
     end)
 end
-
 task.spawn(function() while true do task.wait(10); shotsBaseFlush() end end)
-
-local function bumpShot() pendingShots = pendingShots + 1; if updateShotsBaseUI then updateShotsBaseUI() end end
-local function bumpKill() pendingKills = pendingKills + 1; if updateShotsBaseUI then updateShotsBaseUI() end end
+local function bumpShot() pendingShots += 1; if updateShotsBaseUI then updateShotsBaseUI() end end
+local function bumpKill() pendingKills += 1; if updateShotsBaseUI then updateShotsBaseUI() end end
 
 -- ============================================================
 -- SPLASH
 -- ============================================================
 task.spawn(function()
-    local playerGui = LocalPlayer:WaitForChild(S.PlayerGui)
-    local old = playerGui:FindFirstChild(S.Splash); if old then old:Destroy() end
-    local splashGui = Instance.new("ScreenGui")
-    splashGui.Name, splashGui.ResetOnSpawn, splashGui.IgnoreGuiInset, splashGui.DisplayOrder =
-        S.Splash, false, true, 100000
-    splashGui.Parent = playerGui
-
+    local pg = LocalPlayer:WaitForChild(S.PlayerGui)
+    local old = pg:FindFirstChild(S.Splash); if old then old:Destroy() end
+    local sg = Instance.new("ScreenGui")
+    sg.Name, sg.ResetOnSpawn, sg.IgnoreGuiInset, sg.DisplayOrder = S.Splash, false, true, 100000
+    sg.Parent = pg
     local bg = Instance.new("Frame")
     bg.Size, bg.BackgroundColor3, bg.BackgroundTransparency, bg.BorderSizePixel =
         UDim2.fromScale(1,1), Color3.fromRGB(8,6,16), 1, 0
-    bg.Parent = splashGui
+    bg.Parent = sg
     local bgGrad = Instance.new("UIGradient")
     bgGrad.Color = ColorSequence.new{
         ColorSequenceKeypoint.new(0, Color3.fromRGB(12,4,28)),
         ColorSequenceKeypoint.new(0.5, Color3.fromRGB(6,8,20)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(24,4,18)),
-    }
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(24,4,18))}
     bgGrad.Rotation, bgGrad.Parent = 60, bg
-
-    local titleBox = Instance.new("Frame")
-    titleBox.Size, titleBox.Position, titleBox.AnchorPoint, titleBox.BackgroundTransparency =
+    local tB = Instance.new("Frame")
+    tB.Size, tB.Position, tB.AnchorPoint, tB.BackgroundTransparency =
         UDim2.new(0,640,0,110), UDim2.fromScale(0.5,0.44), Vector2.new(0.5,0.5), 1
-    titleBox.Parent = bg
-    local titleScale = Instance.new("UIScale"); titleScale.Scale, titleScale.Parent = 0.35, titleBox
-    local title = Instance.new("TextLabel")
-    title.Size, title.BackgroundTransparency, title.Text = UDim2.fromScale(1,1), 1, "Shooter Slop"
-    title.TextColor3, title.Font, title.TextSize, title.TextTransparency =
+    tB.Parent = bg
+    local tS = Instance.new("UIScale"); tS.Scale, tS.Parent = 0.35, tB
+    local t = Instance.new("TextLabel")
+    t.Size, t.BackgroundTransparency, t.Text = UDim2.fromScale(1,1), 1, "Shooter Slop"
+    t.TextColor3, t.Font, t.TextSize, t.TextTransparency =
         Color3.fromRGB(255,255,255), Enum.Font.GothamBlack, 84, 1
-    title.Parent = titleBox
-    local titleGrad = Instance.new("UIGradient")
-    titleGrad.Color = ColorSequence.new{
+    t.Parent = tB
+    local tG = Instance.new("UIGradient")
+    tG.Color = ColorSequence.new{
         ColorSequenceKeypoint.new(0, Color3.fromRGB(255,200,140)),
         ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255,255,255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(140,200,255)),
-    }
-    titleGrad.Parent = title
-    local titleStroke = Instance.new("UIStroke")
-    titleStroke.Color, titleStroke.Thickness, titleStroke.Transparency =
-        Color3.fromRGB(120,200,255), 2, 1
-    titleStroke.Parent = title
-
-    local divider = Instance.new("Frame")
-    divider.Size, divider.Position, divider.AnchorPoint = UDim2.new(0,0,0,2), UDim2.fromScale(0.5,0.535), Vector2.new(0.5,0.5)
-    divider.BackgroundColor3, divider.BorderSizePixel, divider.Parent = Color3.fromRGB(150,210,255), 0, bg
-    local divGrad = Instance.new("UIGradient")
-    divGrad.Transparency = NumberSequence.new{
-        NumberSequenceKeypoint.new(0,1), NumberSequenceKeypoint.new(0.5,0), NumberSequenceKeypoint.new(1,1),
-    }
-    divGrad.Parent = divider
-
-    local subtitle = Instance.new("TextLabel")
-    subtitle.Size, subtitle.Position, subtitle.AnchorPoint = UDim2.new(0,640,0,40), UDim2.fromScale(0.5,0.63), Vector2.new(0.5,0.5)
-    subtitle.BackgroundTransparency, subtitle.Text = 1, "By  Poor Slop AI  —  AutoPredict"
-    subtitle.TextColor3, subtitle.Font, subtitle.TextSize, subtitle.TextTransparency =
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(140,200,255))}
+    tG.Parent = t
+    local tStr = Instance.new("UIStroke")
+    tStr.Color, tStr.Thickness, tStr.Transparency = Color3.fromRGB(120,200,255), 2, 1
+    tStr.Parent = t
+    local div = Instance.new("Frame")
+    div.Size, div.Position, div.AnchorPoint = UDim2.new(0,0,0,2), UDim2.fromScale(0.5,0.535), Vector2.new(0.5,0.5)
+    div.BackgroundColor3, div.BorderSizePixel, div.Parent = Color3.fromRGB(150,210,255), 0, bg
+    local st = Instance.new("TextLabel")
+    st.Size, st.Position, st.AnchorPoint = UDim2.new(0,640,0,40), UDim2.fromScale(0.5,0.63), Vector2.new(0.5,0.5)
+    st.BackgroundTransparency, st.Text = 1, "By  Poor Slop AI"
+    st.TextColor3, st.Font, st.TextSize, st.TextTransparency =
         Color3.fromRGB(200,220,255), Enum.Font.GothamBold, 22, 1
-    subtitle.Parent = bg
-
+    st.Parent = bg
     TweenService:Create(bg, TweenInfo.new(0.3), {BackgroundTransparency=0}):Play()
     task.wait(0.25)
-    TweenService:Create(title, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {TextTransparency=0}):Play()
-    TweenService:Create(titleScale, TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale=1}):Play()
-    TweenService:Create(titleStroke, TweenInfo.new(0.45), {Transparency=0.4}):Play()
+    TweenService:Create(t, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {TextTransparency=0}):Play()
+    TweenService:Create(tS, TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale=1}):Play()
+    TweenService:Create(tStr, TweenInfo.new(0.45), {Transparency=0.4}):Play()
     task.wait(0.35)
-    TweenService:Create(divider, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size=UDim2.new(0,420,0,2)}):Play()
+    TweenService:Create(div, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size=UDim2.new(0,420,0,2)}):Play()
     task.wait(0.2)
-    subtitle.Position = UDim2.fromScale(0.5,0.65)
-    TweenService:Create(subtitle, TweenInfo.new(0.35), {TextTransparency=0}):Play()
-    TweenService:Create(subtitle, TweenInfo.new(0.35), {Position=UDim2.fromScale(0.5,0.60)}):Play()
+    st.Position = UDim2.fromScale(0.5,0.65)
+    TweenService:Create(st, TweenInfo.new(0.35), {TextTransparency=0}):Play()
+    TweenService:Create(st, TweenInfo.new(0.35), {Position=UDim2.fromScale(0.5,0.60)}):Play()
     task.wait(1.85)
     TweenService:Create(bg, TweenInfo.new(0.55), {BackgroundTransparency=1}):Play()
-    TweenService:Create(title, TweenInfo.new(0.55), {TextTransparency=1}):Play()
-    TweenService:Create(titleStroke, TweenInfo.new(0.55), {Transparency=1}):Play()
-    TweenService:Create(subtitle, TweenInfo.new(0.55), {TextTransparency=1}):Play()
-    TweenService:Create(divider, TweenInfo.new(0.55), {BackgroundTransparency=1}):Play()
-    task.wait(0.6); splashGui:Destroy()
+    TweenService:Create(t, TweenInfo.new(0.55), {TextTransparency=1}):Play()
+    TweenService:Create(tStr, TweenInfo.new(0.55), {Transparency=1}):Play()
+    TweenService:Create(st, TweenInfo.new(0.55), {TextTransparency=1}):Play()
+    TweenService:Create(div, TweenInfo.new(0.55), {BackgroundTransparency=1}):Play()
+    task.wait(0.6); sg:Destroy()
 end)
 
 -- ============================================================
@@ -191,17 +154,22 @@ local CONFIG = {
     RoundModulePath = { S.Modules, S.CRC },
     GunName = S.Gun, ShootEventName = S.Shoot,
     PredictionEnabled = true,
-    ShootOffset = { X = 0, Y = 0, Z = 0 },
-    WallCheck = true,
-    Cooldown = 0.25,
+    Cooldown = 0.15,
     KillCheckTime = 5,
     NotificationDuration = 2.5,
-    MurdererPollInterval = 0.5,
 }
 
--- ============================================================
--- SILENT AIM CORE (только AutoPredict)
--- ============================================================
+local SILENT_AIM_MODES = { "VM", "Dynamic", "Simple" }
+local silentAimMode = "VM"
+
+local HOOK = {
+    enabled  = true,
+    disabled = 0,
+    hooked   = 0,
+    shots    = 0,
+    lastMsg  = "idle",
+}
+
 local silentAimTune = {
     pingScale=1, base=0.113, minLead=0.02, maxLead=0.60,
     airExtra=0, turnBoost=0, turnGate=0.15,
@@ -209,28 +177,31 @@ local silentAimTune = {
     straightScale=1, turnScale=1,
     airAimHeight=5, fallMargin=2, gravityScale=1,
     yBias=0, floorClamp=1.2,
-
-    -- Full (air) — безопасные дефолты под MM2
-    bulletSpeed    = 0.0006,
-    ballisticIters = 2,
-    maxFlightTime  = 0.25,
-
-    localPingWeight   = 1.0,
-    targetPingWeight  = 0.5,
-    assumedTargetPing = 0.05,
-
-    -- AutoPredict: веса манёвренности
-    maneuverAccelW  = 0.55,
-    maneuverTurnW   = 0.35,
-    maneuverStrafeW = 0.10,
-    maneuverLow     = 0.15,
-    maneuverHigh    = 0.85,
+    bulletSpeed = 0.0125,
+    serverLatency = 0.025, accelWeight = 0.55, accelMaxMag = 65,
+    strafeLeadMult = 0.72, strafeWindow = 0.30,
+    distanceMaxLeadMult = 1.50, distanceMaxLeadScale = 80,
+    minHorizSpeed = 1.2,
+    simpleLead = 2.8,
 }
+local ADV = { enabled=true, calibMin=0.75, calibMax=1.25, calibHitStep=0.015, calibMissStep=0.030 }
+local targetCalib = {}
+local function getCalib(p)
+    local c = targetCalib[p]; if not c then c = { bias=1.0, hits=0, misses=0 }; targetCalib[p] = c end
+    return c
+end
+local function recordCalibHit(p)
+    if not p then return end
+    local c = getCalib(p); c.hits += 1
+    c.bias = math.clamp(c.bias - ADV.calibHitStep, ADV.calibMin, ADV.calibMax)
+end
+local function recordCalibMiss(p)
+    if not p then return end
+    local c = getCalib(p); c.misses += 1
+    c.bias = math.clamp(c.bias + ADV.calibMissStep, ADV.calibMin, ADV.calibMax)
+end
 
 local TURN_WINDOW, TURN_MIN_SPEED, HIST_SPAN = 0.12, 1.5, 1.0
-local FLEE_OFFSET_X, FLEE_OFFSET_Y, FLEE_OFFSET_Z = 2.0, 1.0, 0.0
-local FLEE_MIN_SPEED, FLEE_MIN_DISTANCE, FLEE_DOT_THRESHOLD = 4.0, 8.0, 0.55
-
 local silentAimLastLead = 0
 local saHist, saSmoothVel, saSmoothAccel, saLastJump, saLastTick = {}, {}, {}, {}, {}
 
@@ -238,34 +209,66 @@ local saHist, saSmoothVel, saSmoothAccel, saLastJump, saLastTick = {}, {}, {}, {
 -- HELPERS
 -- ============================================================
 local function saFlat(v) return Vector3.new(v.X,0,v.Z) end
-local function saSafeUnit(v) return v.Magnitude > 1e-4 and v.Unit or Vector3.zero end
 local function saTurnBetween(a,b)
     if a.Magnitude < TURN_MIN_SPEED or b.Magnitude < TURN_MIN_SPEED then return 0 end
     return 1 - math.clamp(a.Unit:Dot(b.Unit), -1, 1)
 end
-local function saPushVelSample(player, vel)
-    local now = os.clock()
-    local h = saHist[player] or {}; saHist[player] = h
+local function saPushVelSample(p, vel)
+    local now = os.clock(); local h = saHist[p] or {}; saHist[p] = h
     table.insert(h, {now, vel.X, vel.Y, vel.Z})
     while #h > 0 and now - h[1][1] > HIST_SPAN do table.remove(h,1) end
 end
-local function saVelAgo(player, ago)
-    local h = saHist[player]; if not h or #h == 0 then return nil end
+local function saVelAgo(p, ago)
+    local h = saHist[p]; if not h or #h == 0 then return nil end
     local now = os.clock(); if TURN_WINDOW < now - h[#h][1] then return nil end
     local tgt = now - ago
-    for i = #h,1,-1 do
-        if h[i][1] <= tgt then return Vector3.new(h[i][2],h[i][3],h[i][4]) end
-    end
+    for i = #h,1,-1 do if h[i][1] <= tgt then return Vector3.new(h[i][2],h[i][3],h[i][4]) end end
     return Vector3.new(h[1][2],h[1][3],h[1][4])
 end
-local function getPingSafe()
+local function countStrafeFlips(p, window)
+    local h = saHist[p]; if not h or #h < 3 then return 0 end
+    local now = os.clock(); local r = {}
+    for i = #h,1,-1 do if now - h[i][1] > window then break end; table.insert(r,1,h[i]) end
+    if #r < 3 then return 0 end
+    local flips, lastDot = 0, nil
+    for i = 2, #r do
+        local v1 = Vector3.new(r[i-1][2],0,r[i-1][4])
+        local v2 = Vector3.new(r[i][2],0,r[i][4])
+        if v1.Magnitude > 2 and v2.Magnitude > 2 then
+            local d = v1.Unit:Dot(v2.Unit)
+            if lastDot and lastDot > 0.15 and d < -0.15 then flips += 1 end
+            lastDot = d
+        end
+    end
+    return flips
+end
+
+-- Ping
+local PING_N = 12; local pingH, pingMeasured = {}, 0
+local function sampleRawPing()
     local p = 0
+    pcall(function() local v = LocalPlayer:GetNetworkPing()
+        if type(v)=="number" and v==v and v>0 then p = v end end)
     pcall(function()
-        local v = LocalPlayer:GetNetworkPing()
-        if type(v) == "number" and v == v then p = v end
+        local net = Stats and Stats.Network; local items = net and net.ServerStatsItem
+        if items then for _, k in ipairs({"Data Ping","Ping"}) do
+            local it = items[k]
+            if it and it.GetValue then local v = it:GetValue()
+                if type(v)=="number" and v==v and v>0 then p = math.max(p, v/1000) end end
+        end end
     end)
     return p
 end
+task.spawn(function() while true do
+    local s = sampleRawPing(); table.insert(pingH, s)
+    if #pingH > PING_N then table.remove(pingH,1) end
+    local sum,cnt = 0,0
+    for _,v in ipairs(pingH) do if v>0 then sum+=v; cnt+=1 end end
+    pingMeasured = cnt>0 and sum/cnt or 0
+    task.wait(0.3)
+end end)
+local function getPingSafe() return pingMeasured > 0 and pingMeasured or sampleRawPing() end
+local function getPingMs() return math.floor(getPingSafe()*1000 + 0.5) end
 
 local function silentAimBuildState(player)
     local char = player and player.Character
@@ -283,9 +286,7 @@ local function silentAimBuildState(player)
     local hit = workspace:Raycast(hrp.Position, Vector3.new(0,-80,0), rp)
     local velAgo = saVelAgo(player, TURN_WINDOW) or vel
     return {
-        player = player,
-        pos = hrp.Position, vel = vel,
-        svel = saSmoothVel[player] or vel,
+        pos = hrp.Position, vel = vel, svel = saSmoothVel[player] or vel,
         accel = saSmoothAccel[player] or Vector3.zero,
         moveDir = hum.MoveDirection, walkSpeed = hum.WalkSpeed,
         jumpPower = hum.UseJumpPower and hum.JumpPower or (hum.JumpHeight*2*workspace.Gravity)^0.5,
@@ -302,227 +303,510 @@ local function silentAimBuildState(player)
     }
 end
 
-local function isTargetFleeingFromMe(state)
-    if FLEE_OFFSET_X <= 0 then return false end
-    local myChar = LocalPlayer.Character; if not myChar then return false end
-    local myHrp = myChar:FindFirstChild(S.HRP); if not myHrp then return false end
-    local vel = saFlat(state.vel); if vel.Magnitude < FLEE_MIN_SPEED then return false end
-    local toMe = saFlat(myHrp.Position - state.pos)
-    if toMe.Magnitude < FLEE_MIN_DISTANCE then return false end
-    return vel.Unit:Dot(toMe.Unit) < -FLEE_DOT_THRESHOLD
-end
-
 -- ============================================================
 -- PREDICTORS
 -- ============================================================
 local silentAimPredictors = {}
 
-silentAimPredictors.Dynamic = function(s, t)
+-- AryslanHUB formula
+silentAimPredictors.Simple = function(s, t, player, _origin)
+    t = t or silentAimTune
+    local char = player and player.Character
+    if not char then return s.pos, 0 end
+    local upperTorso = char:FindFirstChild(S.UpperTorso) or char:FindFirstChild(S.Torso) or char:FindFirstChild(S.HRP)
+    local hum = char:FindFirstChildOfClass(S.Humanoid)
+    if not upperTorso or not hum then return s.pos, 0 end
+    local lead = t.simpleLead or 2.8
+    return upperTorso.Position
+        + upperTorso.AssemblyLinearVelocity * Vector3.new(0.75, 0.5, 0.75) * (lead / 15)
+        + hum.MoveDirection * lead, lead
+end
+
+silentAimPredictors.Dynamic = function(s, t, player, _origin)
     t = t or silentAimTune
     if s.sitting then return s.pos, 0 end
-    local n = s.ping*t.pingScale + t.base
+    local n = s.ping*t.pingScale + t.base + t.serverLatency
     if s.air then n += t.airExtra end
     if t.turnGate < s.turn then n += s.turn*t.turnBoost end
-    local lead = math.clamp(n, t.minLead, t.maxLead)
+    local baseLead = math.clamp(n, t.minLead, t.maxLead)
+    local dist = s.origin and (s.pos - s.origin).Magnitude or 20
+    local bulletTime = (t.bulletSpeed and t.bulletSpeed > 0) and dist*t.bulletSpeed or 0
+    local maxMult = math.clamp(1 + dist/t.distanceMaxLeadScale, 1, t.distanceMaxLeadMult)
+    local lead = math.min(baseLead, t.maxLead*maxMult) + bulletTime
+    local strafeFlips = countStrafeFlips(player, t.strafeWindow)
+    local strafeMul = (strafeFlips >= 2) and t.strafeLeadMult or 1
+    local calib = (ADV.enabled and player and targetCalib[player]) and targetCalib[player].bias or 1
     local intent = s.moveDir * (s.walkSpeed > 0 and s.walkSpeed or 16)
     local ib = s.air and t.intentBlendAir or t.intentBlend
-    local sc = math.clamp((s.turn - t.turnGate) / math.max(0.001, 1 - t.turnGate), 0, 1)
-    local hP = saFlat(s.vel):Lerp(saFlat(intent), ib) * lead
-        * (t.straightScale + (t.turnScale - t.straightScale) * sc)
+    local sc = math.clamp((s.turn - t.turnGate)/math.max(0.001, 1-t.turnGate), 0, 1)
+    local hv = saFlat(s.vel):Lerp(saFlat(intent), ib)
+    local hP = hv*lead*(t.straightScale + (t.turnScale-t.straightScale)*sc)*strafeMul*calib
+    if ADV.enabled and t.accelWeight > 0 then
+        local a = s.accel; local am = a.Magnitude
+        if am > t.accelMaxMag then a = am>1e-6 and (a*(t.accelMaxMag/am)) or Vector3.zero end
+        hP = hP + saFlat(a)*(0.5*lead*lead)*t.accelWeight*calib
+    end
     local g = workspace.Gravity
     local floorY = s.floorY and (s.floorY + (s.standHeight or 3)) or (s.pos.Y - t.floorClamp)
-    local jp = (s.jumpPower or 0) > 0 and s.jumpPower or 50
-    local peak = jp*jp/2*g
     local y
-    if not s.air then
-        y = s.pos.Y
-    elseif peak + t.fallMargin < (s.pos.Y - floorY) then
-        y = math.max(s.pos.Y + s.vel.Y*lead - 0.5*g*t.gravityScale*lead*lead, floorY)
+    if not s.air then y = s.pos.Y
     else
-        y = floorY + t.airAimHeight
+        local jp = (s.jumpPower or 0) > 0 and s.jumpPower or 50
+        local peak = jp*jp/2*g
+        if peak + t.fallMargin < (s.pos.Y - floorY) then
+            y = math.max(s.pos.Y + s.vel.Y*lead - 0.5*g*t.gravityScale*lead*lead, floorY)
+        else y = floorY + t.airAimHeight end
     end
-    return Vector3.new(s.pos.X + hP.X, y + t.yBias, s.pos.Z + hP.Z), lead
-end
-
-silentAimPredictors.Adaptive = function(s, t)
-    t = t or silentAimTune
-    if s.sitting then return s.pos, 0 end
-    local n = s.ping * t.pingScale + t.base
-    if s.air then n += t.airExtra end
-    local turnPred = math.clamp((s.accelMag or 0) / 50, 0, 1)
-    n += turnPred * 0.05
-    local lead = math.clamp(n, t.minLead, t.maxLead)
-    local predVel = saFlat(s.vel + (s.accel or Vector3.zero) * (lead * 0.5))
-    local velBlend = math.clamp(1 - turnPred * 0.7, 0.30, 1.0)
-    local intent   = s.moveDir * (s.walkSpeed > 0 and s.walkSpeed or 16)
-    local ib       = s.air and t.intentBlendAir or t.intentBlend
-    local blendDir = predVel * velBlend + saFlat(intent) * (1 - velBlend)
-    local hPred    = (blendDir:Lerp(saFlat(intent), ib)) * lead
-    local g  = workspace.Gravity
-    local floorY = s.floorY and (s.floorY + (s.standHeight or 3)) or (s.pos.Y - t.floorClamp)
-    local jp = (s.jumpPower or 0) > 0 and s.jumpPower or 50
-    local peak = jp * jp / (2 * g)
-    local y
-    if not s.air then
-        y = s.pos.Y
-    elseif peak + t.fallMargin < (s.pos.Y - floorY) then
-        y = math.max(s.pos.Y + s.vel.Y * lead - 0.5 * g * t.gravityScale * lead * lead, floorY)
-    else
-        y = floorY + t.airAimHeight
+    if hv.Magnitude < t.minHorizSpeed and not s.air then
+        return Vector3.new(s.pos.X, y + t.yBias, s.pos.Z), lead
     end
-    return Vector3.new(s.pos.X + hPred.X, y + t.yBias, s.pos.Z + hPred.Z), lead
-end
-
-silentAimPredictors.Full = function(s, t)
-    t = t or silentAimTune
-    if s.sitting then return s.pos, 0 end
-    local localPing = s.ping or 0
-    if localPing <= 0 then localPing = t.base end
-    local targetPing = t.assumedTargetPing or localPing
-    if s.player then
-        local ok, tp = pcall(function() return s.player:GetNetworkPing() end)
-        if ok and type(tp) == "number" and tp > 0 then targetPing = tp end
-    end
-    local baseLead = localPing * (t.localPingWeight  or 1.0)
-                   + targetPing * (t.targetPingWeight or 0.5)
-                   + t.base
-    if s.air then baseLead += t.airExtra end
-    if t.turnGate < s.turn then baseLead += s.turn * t.turnBoost end
-    local lead = math.clamp(baseLead, t.minLead, t.maxLead)
-    local accel = Vector3.zero
-    if s.accel then
-        accel = Vector3.new(
-            s.accel.X,
-            s.air and (-workspace.Gravity * (t.gravityScale or 1)) or 0,
-            s.accel.Z
-        )
-    end
-    local aim = s.pos + s.vel * lead + accel * (0.5 * lead * lead)
-    local myChar = LocalPlayer.Character
-    local myHrp  = myChar and myChar:FindFirstChild(S.HRP)
-    local origin = myHrp and myHrp.Position or s.pos
-    local bulletSpeed = t.bulletSpeed or 0.0006
-    local tt = lead
-    for _ = 1, (t.ballisticIters or 2) do
-        local d  = (aim - origin).Magnitude
-        tt = lead + d * bulletSpeed
-        if tt > (t.maxFlightTime or 0.25) then tt = t.maxFlightTime or 0.25 end
-        aim = s.pos + s.vel * tt + accel * (0.5 * tt * tt)
-    end
-    local floorY = s.floorY and (s.floorY + (s.standHeight or 3)) or (s.pos.Y - (t.floorClamp or 1.2))
-    if aim.Y < floorY then
-        aim = Vector3.new(aim.X, floorY + (t.airAimHeight or 5), aim.Z)
-    end
-    return Vector3.new(aim.X, aim.Y + t.yBias, aim.Z), tt
+    return Vector3.new(s.pos.X+hP.X, y+t.yBias, s.pos.Z+hP.Z), lead
 end
 
 -- ============================================================
--- AUTOPREDICT — единственный режим
+-- FULL VM PREDICTION MODULE (all 12 sections)
 -- ============================================================
-silentAimPredictors.AutoPredict = function(s, t)
-    t = t or silentAimTune
-    if s.sitting then return s.pos, 0 end
+local Vec = Vector3.new
+local vclamp = math.clamp
+local _sqrt, _abs, _sin, _cos = math.sqrt, math.abs, math.sin, math.cos
+local _atan2, _floor, _ceil, _exp = math.atan2, math.floor, math.ceil, math.exp
+local _clock, _HUGE = os.clock, 1/0
 
-    -- 1) В воздухе — баллистика
-    if s.air then
-        return silentAimPredictors.Full(s, t)
-    end
+local Prediction = {}
+Prediction.__index = Prediction
 
-    -- 2) Манёвренность: 0 = спокойная цель, 1 = активный стрейф/поворот
-    local accelScore  = math.clamp((s.accelMag or 0) / 50, 0, 1)
-    local turnScore   = math.clamp((s.turn or 0) / 0.4, 0, 1)
-    local strafeScore = s.strafing and 1 or 0
-    local maneuver = accelScore * t.maneuverAccelW
-                   + turnScore  * t.maneuverTurnW
-                   + strafeScore * t.maneuverStrafeW
-    maneuver = math.clamp(maneuver, 0, 1)
-
-    if maneuver <= t.maneuverLow then
-        return silentAimPredictors.Dynamic(s, t)
-    end
-    if maneuver >= t.maneuverHigh then
-        return silentAimPredictors.Adaptive(s, t)
-    end
-
-    -- 3) Плавный блендинг
-    local aimDyn, leadDyn = silentAimPredictors.Dynamic(s, t)
-    local aimAda, leadAda = silentAimPredictors.Adaptive(s, t)
-    local b = (maneuver - t.maneuverLow) / (t.maneuverHigh - t.maneuverLow)
-    return aimDyn:Lerp(aimAda, b), leadDyn + (leadAda - leadDyn) * b
+local Ping = { Value=0, Echo=nil, EchoAt=0, EchoPing=0, NextAt=0 }
+local function ServerPing()
+    local ok, v = pcall(function()
+        return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+    end)
+    if ok and type(v)=="number" and v>0 and v<2000 then return v/1000 end
+end
+local function ClientPing(prov)
+    if not prov or not prov.GetNetworkPing then return nil end
+    local ok, p = pcall(prov.GetNetworkPing, prov)
+    if ok and type(p)=="number" and p>=0 and p<2 then return p end
 end
 
--- ============================================================
--- WALL CHECK
--- ============================================================
-local function silentAimWallBlocked(myChar, murdererChar, fromPos, toPos)
-    local delta = toPos - fromPos
-    if delta.Magnitude < 0.001 then return false, nil end
-    local filter = { myChar }
-    if murdererChar then table.insert(filter, murdererChar) end
-    for _, v in ipairs(CollectionService:GetTagged(S.PassThrough)) do
-        table.insert(filter, v)
+function Prediction:GetRoundTrip(t, prov)
+    t = t or _clock()
+    if t >= Ping.NextAt then
+        Ping.NextAt = t + 0.25
+        local v = ServerPing() or ClientPing(prov)
+        if v then Ping.Value = Ping.Value + (v - Ping.Value) * 0.35 end
     end
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = filter
-    params.IgnoreWater = true
-    for _ = 1, 12 do
-        local hit = workspace:Raycast(fromPos, delta, params)
-        if not hit then return false, nil end
-        if murdererChar and hit.Instance:IsDescendantOf(murdererChar) then return false, nil end
-        if hit.Instance.Transparency ~= 1 then
-            return true, hit.Instance:GetFullName()
+    if Ping.Echo and (t - Ping.EchoAt) < 90 then
+        return vclamp(Ping.Echo + (Ping.Value - Ping.EchoPing), 0, 0.6)
+    end
+    return vclamp(Ping.Value, 0, 0.6)
+end
+function Prediction:SetEcho(value, echoPing, t)
+    Ping.Echo = value; Ping.EchoPing = echoPing or 0; Ping.EchoAt = t or _clock()
+end
+
+Prediction.InterpolationBase  = 0.12
+Prediction.InterpolationScale = 0.60
+Prediction.InterpolationDelay = 0.15
+Prediction.MaxPredictionTime  = 0.8
+
+function Prediction:GetPredictionTime(ctx, t, prov)
+    if ctx.Settings and ctx.Settings.Aimbot and ctx.Settings.Aimbot.Prediction == false then
+        return 0
+    end
+    local lead = vclamp((ctx.AutoCal and ctx.AutoCal.Lead) or 0, -0.1, 0.15)
+    local rtt  = self:GetRoundTrip(t, prov)
+    self.InterpolationDelay = vclamp(self.InterpolationBase + self.InterpolationScale * rtt, 0.05, 0.35)
+    return vclamp(rtt + self.InterpolationDelay + lead, 0, self.MaxPredictionTime)
+end
+
+function Prediction:PredictPath(origin, direction, v, gravity, dt, hh)
+    if dt <= 0 then return Vec(0,0,0), nil end
+    local g   = gravity or 0
+    local arc = Vec(v.X*dt, v.Y*dt - 0.5*g*dt*dt, v.Z*dt)
+    local groundY = self.GroundY
+    if groundY then
+        local feet = origin.Y + arc.Y - (hh or 2.1)
+        if feet < groundY - 0.3 and _abs(origin.Y - groundY) < 8 then
+            return Vec(arc.X, groundY - origin.Y + (hh or 2.1), arc.Z), groundY
         end
-        table.insert(filter, hit.Instance)
-        params.FilterDescendantsInstances = filter
     end
-    return false, nil
+    return arc, nil
+end
+
+function Prediction:VerticalPlan(ctx, now, dt, gravity, hh)
+    local v   = ctx.Vertical or {}
+    local vy  = (v.Velocity or 0) + (v.Gravity or 0) * dt
+    local landed = v.LandAt ~= nil and (now + dt) >= v.LandAt
+    if landed then vy = 0 end
+    return vy, (ctx.Airborne and vy > 0) or landed, landed
+end
+
+function Prediction:OscillationOffset(ctx, now, dt)
+    local o = ctx.Oscillation
+    if not o or not o.Period or o.Period <= 0 then return nil end
+    local ph  = ((now + dt) / o.Period) * 2 * math.pi
+    local amp = o.Amplitude or 0
+    local x, z = _cos(ph) * amp, _sin(ph) * amp
+    if o.Axis then return Vec(x * o.Axis.X, 0, z * o.Axis.Z) end
+    return Vec(x, 0, z)
+end
+
+function Prediction:SnapToGround(pos, window) return pos end
+function Prediction:IsTargetGrounded(pos) return true end
+function Prediction:Noise(x, y, amp, freq) return math.noise(x * freq, y * freq, 0) * amp end
+function Prediction:ObserverPosition()
+    local cam = Workspace.CurrentCamera
+    return cam and cam.CFrame.Position or nil
+end
+
+function Prediction:PredictOffset(ctx, now, dt, origin, dir, velocity, targetPos, _, hh)
+    local GRAV_MAX, TURN_LIMIT, SPEED_LIMIT, TURN_SAMPLE_MIN = 500, 0.8, 6, 6
+    local TURN_VAR_MAX_SQ, TURN_THETA_CLAMP = 0.5, 2.5
+    local LAND_WINDOW, LAND_Y_TOL, GROUND_PEN = 1, 8, 0.3
+    local PERP_MIN, KERNEL_S2, KERNEL_POW = 1, 0.6, 3
+    local SCORE_HYST, REC_INTERVAL, PENDING_MAX = 0.04, 1/60, 90
+
+    -- 5.1 turn-arc
+    local gravity = ctx.Airborne and vclamp(ctx.Gravity or 0, 0, GRAV_MAX) or 0
+    local turn = vclamp(ctx.TurnRate or 0, -12, 12)
+    local speed = velocity.Magnitude
+    if _abs(turn) > TURN_LIMIT and speed > SPEED_LIMIT
+       and (ctx.TurnSamples or 0) >= TURN_SAMPLE_MIN
+       and not ctx.Oscillation and not ctx.Jitter
+       and _sqrt(vclamp(ctx.TurnVariance or 0, 0, 200)) < TURN_VAR_MAX_SQ * _abs(turn) + 0.5
+       and dt > 0 then
+        local theta = vclamp(turn * dt, -TURN_THETA_CLAMP, TURN_THETA_CLAMP)
+        local a = _sin(theta) / turn
+        local b = (1 - _cos(theta)) / turn
+        local f = velocity.Unit
+        local s = Vec(-f.Z, 0, f.X)
+        local m = (f * a + s * b) * (speed / dt)
+        velocity = Vec(m.X, velocity.Y, m.Z)
+    end
+
+    -- 5.2 ballistic + snap
+    local arc, groundY = self:PredictPath(origin, dir, velocity, gravity, dt, hh)
+    local Rg = ctx.GroundY
+    if Rg and groundY and (now - (ctx.GroundAt or 0)) < LAND_WINDOW
+       and _abs(targetPos.Y - Rg) < LAND_Y_TOL
+       and targetPos.Y + arc.Y < Rg - GROUND_PEN then
+        arc = Vec(arc.X, Rg - targetPos.Y, arc.Z)
+    end
+
+    -- 5.3 vertical plan
+    local vy, flag, landed = self:VerticalPlan(ctx, now, dt, vclamp(ctx.Gravity or 196.2, 1, 500), hh)
+    if landed then arc = Vec(arc.X, vy, arc.Z)
+    elseif vy > 0 then arc = arc + Vec(0, vy, 0) end
+
+    -- 5.4 lift
+    local lift = ctx.Lift
+    if lift and lift.Period and dt > 0 and self:IsTargetGrounded(targetPos) then
+        local period = _ceil(dt / lift.Period)
+        local tau = (now + dt - period * lift.Period - lift.Start) * 40
+        local idx = _floor(tau)
+        local y
+        if idx + 1 >= #lift.Values then
+            local last = lift.Values[#lift.Values]
+            local startLast = lift.Start + (#lift.Values - 1) / 40
+            y = last + (lift.LastY - last) * vclamp(
+                (now + dt - period * lift.Period - startLast)
+                / math.max(lift.LastTime - startLast, 1e-4), 0, 1)
+        elseif idx >= 0 then
+            y = lift.Values[idx+1] + (lift.Values[idx+2] - lift.Values[idx+1]) * (tau - idx)
+        end
+        if y then
+            arc = Vec(arc.X, y - targetPos.Y, arc.Z)
+            flag = self:Noise(0, 0, 0.35 + lift.Error * 1.5, vclamp(hh, 0.5, 4))
+        end
+    end
+
+    -- 5.5 oscillation + jitter
+    local osc = self:OscillationOffset(ctx, now, dt)
+    if osc then arc = Vec(osc.X, arc.Y, osc.Z) end
+    if ctx.Jitter and self:IsTargetGrounded(ctx.MeanOffset) then
+        arc = arc + ctx.MeanOffset
+    end
+    if dt <= 0 then return arc, flag end
+    if not self:IsTargetGrounded(targetPos) then return arc, flag end
+
+    -- 5.6 ensemble bootstrap
+    local experts = ctx.Experts
+    if not experts then
+        experts = {
+            Scores = { Model=0.56, Raw=0.50, Turn=0.48, Accel=0.47, Center=0.45 },
+            Pending = {}, Choice = "Model", Final = 0.5, ChanceAvg = 0.5,
+            Scored = 0, ScoredAt = now, RecordAt = -_HUGE,
+        }
+        ctx.Experts = experts
+    end
+
+    local R = Vec(targetPos.X, 0, targetPos.Z)
+    local points = { Model = R + arc }
+
+    local samples = ctx.Samples or {}
+    local last = samples[#samples]
+    local rawVel = last and last.Raw
+    if rawVel and not ctx.Spoofed then points.Raw = R + rawVel * dt end
+
+    local old
+    for i = #samples - 1, 1, -1 do
+        if now - samples[i].Time >= 0.09 then old = samples[i]; break end
+    end
+    if old and old.Raw and rawVel then
+        local dtOld = now - old.Time
+        if old.Raw.Magnitude > 4 and rawVel.Magnitude > 4 then
+            points.Accel = points.Raw + (rawVel - old.Raw) * (0.35 * dt * dt / dtOld)
+            local f0 = _atan2(rawVel.Z, rawVel.X)
+            local f1 = _atan2(old.Raw.Z, old.Raw.X)
+            local dth = ((f1 - f0 + math.pi) % (2*math.pi)) - math.pi
+            local om = dth / dtOld
+            if _abs(om) > 0.3 then
+                local m = rawVel.Magnitude
+                points.Turn = R + Vec(
+                    _sin(f0 + om*dt) - _sin(f0), 0,
+                    _cos(f0) - _cos(f0 + om*dt)
+                ) * (m / om)
+            end
+        end
+    end
+    points.Turn = points.Turn or points.Raw
+    points.Accel = points.Accel or points.Raw
+
+    -- 5.7 bout detector
+    local bouts = ctx.Bouts
+    if ctx.MoveSince and bouts and #bouts >= 3 then
+        local elapsed = now - ctx.MoveSince
+        local w = math.max(0.35, 1 / math.max((points.Raw or points.Model - R).Magnitude, 0.01))
+        local best, bestT = -1, 1
+        for _, bt in ipairs(bouts) do
+            if bt > elapsed then
+                local t = math.min(bt - elapsed, dt) / dt
+                local cnt = (_abs(1 - t) <= w) and 1 or 0
+                for _, bt2 in ipairs(bouts) do
+                    if bt2 > elapsed and _abs(math.min(bt2 - elapsed, dt)/dt - t) <= w then
+                        cnt = cnt + 1
+                    end
+                end
+                if cnt > best + 0.01 then best, bestT = cnt, t end
+            end
+        end
+        local total = 1
+        for _, bt in ipairs(bouts) do
+            if bt > elapsed and _abs(math.min(bt - elapsed, dt)/dt - 1) <= w then
+                total = total + 1
+            end
+        end
+        local y = bestT < 0.999 and bestT or 1
+        ctx.BoutHit = math.max(best, (total >= best + 0.01) and 1 or 0) / total
+        if y < 0.999 then
+            for k, v in pairs(points) do points[k] = R + (v - R) * y end
+        end
+        ctx.BoutFactor = y
+    else
+        ctx.BoutFactor = 1
+        ctx.BoutHit = nil
+    end
+
+    -- 5.8 center
+    local snap = self:SnapToGround(targetPos, 0.3)
+    if snap then points.Center = Vec(snap.X, 0, snap.Z) end
+
+    -- 5.9 score-based choice
+    local scores = experts.Scores
+    local choice = points[experts.Choice] and experts.Choice or "Model"
+    local best = scores[choice] + SCORE_HYST
+    for name in pairs(points) do
+        if scores[name] > best then best, choice = scores[name], name end
+    end
+    experts.Choice = choice
+    local final = points[choice]
+
+    -- 5.10 kernel blend
+    local obs = self:ObserverPosition()
+    local perp = obs and Vec(-(R.Z - obs.Z), 0, R.X - obs.X) or nil
+    if perp and perp.Magnitude > PERP_MIN then
+        local d = perp.Unit
+        local bestS, bestP = -1, final
+        for _, p1 in pairs(points) do
+            local s = 0
+            for _, p2 in pairs(points) do
+                local d1 = (p1 - p2):Dot(d)
+                s = s + scores[p2]^KERNEL_POW * _exp(-d1*d1 / KERNEL_S2)
+            end
+            if s > bestS then bestS, bestP = s, p1 end
+        end
+        for _, p1 in pairs(points) do
+            local mid = (p1 + final) * 0.5
+            local s = 0
+            for _, p2 in pairs(points) do
+                local d1 = (mid - p2):Dot(d)
+                s = s + scores[p2]^KERNEL_POW * _exp(-d1*d1 / KERNEL_S2)
+            end
+            if s > bestS then bestS, bestP = s, mid end
+        end
+        final = bestP
+    end
+
+    -- 5.11 final offset
+    local J = Vec(final.X - R.X, arc.Y, final.Z - R.Z)
+
+    -- 5.12 record for calibration
+    if now - experts.RecordAt >= REC_INTERVAL then
+        experts.RecordAt = now
+        local rec = {
+            Due = now + dt, Time = now, Points = points, Final = final,
+            FinalY = targetPos.Y + J.Y, HalfHeight = vclamp(hh, 0.5, 4), Observer = obs,
+        }
+        table.insert(experts.Pending, rec)
+        if #experts.Pending > PENDING_MAX then table.remove(experts.Pending, 1) end
+        experts.LastRecord = rec
+    end
+    return J, flag
+end
+
+function Prediction:CalibrateScore(ctx, score, boutHit)
+    local ex = ctx.Experts
+    if not ex then return score end
+    local last = ex.LastRecord
+    if last and not last.Chance then last.Chance = score end
+    if ctx.MoveSince and boutHit then
+        score = score * vclamp(0.55 + 0.45 * boutHit, 0, 1)
+    end
+    local scored    = vclamp(ex.Scored / 60, 0, 1)
+    local chanceAvg = vclamp((ex.Final + 0.03) / (ex.ChanceAvg + 0.03), 0.2, 1.05)
+    return vclamp(score * (1 + (chanceAvg - 1) * scored), 0, 1)
+end
+
+function Prediction.new(opts)
+    local self = setmetatable({}, Prediction)
+    if opts then
+        self.GroundY = opts.GroundY
+        self.InterpolationBase  = opts.InterpolationBase  or self.InterpolationBase
+        self.InterpolationScale = opts.InterpolationScale or self.InterpolationScale
+    end
+    return self
 end
 
 -- ============================================================
--- RESOLVE SHOT
+-- VM Predictor wrapper
 -- ============================================================
-local function silentAimResolveShot(targetPlayer, startCFrame)
-    local state = silentAimBuildState(targetPlayer)
-    if not state then return startCFrame, nil, nil end
+local vmPrediction = Prediction.new()
+local vmContexts = {}
 
-    local core, lead
-    if isTargetFleeingFromMe(state) then
-        local fleeDir = saFlat(state.vel)
-        fleeDir = fleeDir.Magnitude > 1 and fleeDir.Unit or Vector3.zero
-        local perp = Vector3.new(-fleeDir.Z, 0, fleeDir.X)
-        core = state.pos
-            + fleeDir * FLEE_OFFSET_X
-            + Vector3.new(0, FLEE_OFFSET_Y, 0)
-            + perp * FLEE_OFFSET_Z
-        lead = 0
-    else
-        core, lead = silentAimPredictors.AutoPredict(state, silentAimTune)
+local function getVmCtx(player)
+    local ctx = vmContexts[player]
+    if not ctx then
+        ctx = {
+            Samples = {}, Bouts = {}, MoveSince = nil,
+            Experts = nil, GroundAt = 0, Spoofed = false,
+            Settings = { Aimbot = { Prediction = true } },
+            AutoCal  = { Lead = 0 },
+            Airborne = false, Gravity = 0, GroundY = nil,
+            Vertical = { Velocity = 0, Gravity = 0, LandAt = nil },
+            TurnRate = 0, TurnSamples = 0, TurnVariance = 0,
+        }
+        vmContexts[player] = ctx
+    end
+    return ctx
+end
+
+silentAimPredictors.VM = function(s, t, player, origin)
+    if not player or not origin then
+        return silentAimPredictors.Dynamic(s, t, player, origin)
+    end
+    local now = _clock()
+    local ctx = getVmCtx(player)
+
+    ctx.Settings.Aimbot.Prediction = CONFIG.PredictionEnabled
+    local calib = targetCalib[player]
+    ctx.AutoCal.Lead = calib and vclamp((calib.bias - 1) * 0.25, -0.1, 0.15) or 0
+
+    ctx.Airborne = s.air
+    ctx.Gravity  = workspace.Gravity
+    ctx.GroundY  = s.floorY or (s.pos.Y - (s.standHeight or 3))
+    if s.floorY then ctx.GroundAt = now end
+    ctx.Vertical = {
+        Velocity = s.vel.Y,
+        Gravity  = -workspace.Gravity,
+        LandAt   = (s.vel.Y > 0) and (now + 2 * s.vel.Y / workspace.Gravity) or nil,
+    }
+
+    ctx.TurnSamples = #ctx.Samples
+    ctx.TurnRate, ctx.TurnVariance = 0, 0
+    if #ctx.Samples >= 2 then
+        local a = ctx.Samples[#ctx.Samples]
+        local b = ctx.Samples[math.max(1, #ctx.Samples - 5)]
+        if a and b then
+            local dtAB = a.Time - b.Time
+            if dtAB > 0.02 and a.Raw.Magnitude > 1 and b.Raw.Magnitude > 1 then
+                ctx.TurnRate = math.acos(math.clamp(a.Raw.Unit:Dot(b.Raw.Unit), -1, 1)) / dtAB
+            end
+        end
+        local angles = {}
+        for i = math.max(1, #ctx.Samples - 8), #ctx.Samples do
+            local smp = ctx.Samples[i]
+            if smp and smp.Raw.Magnitude > 0.5 then
+                angles[#angles+1] = math.atan2(smp.Raw.Z, smp.Raw.X)
+            end
+        end
+        if #angles > 1 then
+            local mean = 0
+            for _, a in ipairs(angles) do mean = mean + a end
+            mean = mean / #angles
+            local var = 0
+            for _, a in ipairs(angles) do var = var + (a - mean)*(a - mean) end
+            ctx.TurnVariance = var / #angles
+        end
     end
 
-    silentAimLastLead = lead or 0
-    return startCFrame, core, core
+    table.insert(ctx.Samples, { Time = now, Raw = s.vel })
+    while #ctx.Samples > 90 and (now - ctx.Samples[1].Time) > 1.5 do
+        table.remove(ctx.Samples, 1)
+    end
+
+    if s.speed > 0.5 then ctx.MoveSince = ctx.MoveSince or now
+    else ctx.MoveSince = nil end
+
+    local okDT, dt = pcall(function()
+        return vmPrediction:GetPredictionTime(ctx, now, LocalPlayer)
+    end)
+    if not okDT or type(dt) ~= "number" or dt <= 0 then
+        return silentAimPredictors.Dynamic(s, t, player, origin)
+    end
+
+    local dir = s.pos - origin
+    dir = dir.Magnitude > 1e-3 and dir.Unit or Vector3.new(0, 0, -1)
+    vmPrediction.GroundY = ctx.GroundY
+
+    local okP, J = pcall(function()
+        return vmPrediction:PredictOffset(ctx, now, dt, origin, dir, s.vel, s.pos, nil, s.standHeight or 3)
+    end)
+    if not okP or typeof(J) ~= "Vector3" then
+        return silentAimPredictors.Dynamic(s, t, player, origin)
+    end
+
+    local result = s.pos + J
+    if t.yBias and t.yBias ~= 0 then result = result + Vector3.new(0, t.yBias, 0) end
+    return result, dt
 end
 
 -- ============================================================
 -- ANTI-TAMPER
 -- ============================================================
-local AT = { tampered = false, refs = {}, checks = 0, fails = 0 }
+local AT = { tampered=false, refs={}, checks=0, fails=0 }
+AT.refs.Simple   = silentAimPredictors.Simple
+AT.refs.Dynamic  = silentAimPredictors.Dynamic
+AT.refs.VM       = silentAimPredictors.VM
+AT.refs.VMPred   = vmPrediction
+AT.refs.VMTable  = vmContexts
+AT.refs.Build    = silentAimBuildState
+AT.refs.CalibHit = recordCalibHit
+AT.refs.CalibMiss= recordCalibMiss
+AT.refs.CalibTbl = targetCalib
+AT.refs.ADV      = ADV
+AT.refs.HOOK     = HOOK
 
-AT.refs.Dynamic     = silentAimPredictors.Dynamic
-AT.refs.Adaptive    = silentAimPredictors.Adaptive
-AT.refs.Full        = silentAimPredictors.Full
-AT.refs.AutoPredict = silentAimPredictors.AutoPredict
-AT.refs.BuildState  = silentAimBuildState
-AT.refs.ResolveShot = silentAimResolveShot
-AT.refs.WallBlocked = silentAimWallBlocked
-AT.refs.SaFlat      = saFlat
-AT.refs.SaSafeUnit  = saSafeUnit
-AT.refs.FleeCheck   = isTargetFleeingFromMe
-
-if type(getgenv) == "function" then
-    pcall(function() getgenv()[S.ATKey] = S.Beacon end)
-end
+if type(getgenv) == "function" then pcall(function() getgenv()[S.ATKey] = S.Beacon end) end
 
 local function integrityCheck()
     if type(getgenv) == "function" then
@@ -530,38 +814,30 @@ local function integrityCheck()
         local v = ok and getgenv()[S.ATKey] or nil
         if v ~= S.Beacon then return false, "beacon" end
     end
-    if silentAimPredictors.Dynamic     ~= AT.refs.Dynamic     then return false, "predDynamic" end
-    if silentAimPredictors.Adaptive    ~= AT.refs.Adaptive    then return false, "predAdaptive" end
-    if silentAimPredictors.Full        ~= AT.refs.Full        then return false, "predFull" end
-    if silentAimPredictors.AutoPredict ~= AT.refs.AutoPredict then return false, "predAuto" end
-    if silentAimBuildState             ~= AT.refs.BuildState  then return false, "buildState" end
-    if silentAimResolveShot            ~= AT.refs.ResolveShot then return false, "resolve" end
-    if silentAimWallBlocked            ~= AT.refs.WallBlocked then return false, "wall" end
-    if saFlat                          ~= AT.refs.SaFlat      then return false, "saFlat" end
-    if saSafeUnit                      ~= AT.refs.SaSafeUnit  then return false, "saSafeUnit" end
-    if isTargetFleeingFromMe           ~= AT.refs.FleeCheck   then return false, "fleeCheck" end
-    if type(silentAimTune.base) ~= "number" or silentAimTune.base < 0 or silentAimTune.base > 5 then return false, "base" end
-    if type(silentAimTune.maxLead) ~= "number" or silentAimTune.maxLead < 0 or silentAimTune.maxLead > 5 then return false, "maxLead" end
-    if type(silentAimTune.bulletSpeed) ~= "number" or silentAimTune.bulletSpeed <= 0 or silentAimTune.bulletSpeed > 1 then return false, "bulletSpeed" end
-    if type(silentAimTune.localPingWeight) ~= "number" or silentAimTune.localPingWeight < 0 or silentAimTune.localPingWeight > 3 then return false, "localPingWeight" end
-    if type(silentAimTune.targetPingWeight) ~= "number" or silentAimTune.targetPingWeight < 0 or silentAimTune.targetPingWeight > 3 then return false, "targetPingWeight" end
+    if silentAimPredictors.Simple  ~= AT.refs.Simple  then return false,"predSimple" end
+    if silentAimPredictors.Dynamic ~= AT.refs.Dynamic then return false,"predDynamic" end
+    if silentAimPredictors.VM      ~= AT.refs.VM      then return false,"predVM" end
+    if vmPrediction                ~= AT.refs.VMPred  then return false,"vmPred" end
+    if vmContexts                  ~= AT.refs.VMTable then return false,"vmTable" end
+    if silentAimBuildState         ~= AT.refs.Build   then return false,"build" end
+    if recordCalibHit              ~= AT.refs.CalibHit then return false,"calibHit" end
+    if recordCalibMiss             ~= AT.refs.CalibMiss then return false,"calibMiss" end
+    if targetCalib                 ~= AT.refs.CalibTbl then return false,"calibTbl" end
+    if ADV                        ~= AT.refs.ADV     then return false,"adv" end
+    if HOOK                       ~= AT.refs.HOOK    then return false,"hook" end
+    if type(HOOK.enabled)~="boolean" then return false,"hookFields" end
+    local modeOK = false
+    for _,m in ipairs(SILENT_AIM_MODES) do if m==silentAimMode then modeOK=true; break end end
+    if not modeOK then return false,"mode" end
     return true
 end
-
 local function checkIntegrityNow()
-    AT.checks = AT.checks + 1
+    AT.checks += 1
     local ok, reason = integrityCheck()
-    if not ok then
-        AT.fails = AT.fails + 1
-        AT.tampered = true
-        return false, reason
-    end
+    if not ok then AT.fails += 1; AT.tampered = true; return false,reason end
     return true
 end
-do
-    local ok, reason = checkIntegrityNow()
-    if not ok then warn("[AT] initial check failed: " .. tostring(reason)) end
-end
+do local ok,r = checkIntegrityNow(); if not ok then warn("[AT] "..tostring(r)) end end
 task.spawn(function() while task.wait(2) do checkIntegrityNow() end end)
 
 -- ============================================================
@@ -573,30 +849,26 @@ do
         local node = ReplicatedStorage
         for _, name in ipairs(CONFIG.RoundModulePath) do
             node = node:WaitForChild(name, 10)
-            if not node then error("Not found: " .. name) end
+            if not node then error("Not found: "..name) end
         end
         return require(node)
     end)
-    if ok and r then CurrentRoundClient = r
-    else warn("[Kill] CurrentRoundClient failed") end
+    if ok and r then CurrentRoundClient = r else warn("[Kill] CRC failed") end
 end
-
 local function getMurderer()
     if not CurrentRoundClient then return nil end
     local ok, m = pcall(function()
         local pd = CurrentRoundClient.PlayerData
         if not pd or not next(pd) then return nil end
         for name, data in pairs(pd) do
-            if data and data[S.Role] == S.Murderer then
-                return Players:FindFirstChild(name)
-            end
+            if data and data[S.Role] == S.Murderer then return Players:FindFirstChild(name) end
         end
     end)
     return (ok and m) or nil
 end
 
 -- ============================================================
--- HEARTBEAT
+-- HEARTBEAT (velocity history)
 -- ============================================================
 RunService.Heartbeat:Connect(function()
     local now = os.clock()
@@ -609,75 +881,65 @@ RunService.Heartbeat:Connect(function()
         if old then
             local dt = now - (saLastTick[p] or now)
             if dt > 1e-3 then
-                local a = math.clamp(dt / 0.10, 0, 1)
+                local a = math.clamp(dt/0.10, 0, 1)
                 local nv = old:Lerp(vel, a)
-                saSmoothAccel[p] = (nv - old) / dt
-                saSmoothVel[p] = nv
+                saSmoothAccel[p] = (nv-old)/dt; saSmoothVel[p] = nv
             end
-        else
-            saSmoothVel[p] = vel; saSmoothAccel[p] = Vector3.zero
-        end
-        saLastTick[p] = now
-        saPushVelSample(p, vel)
+        else saSmoothVel[p] = vel; saSmoothAccel[p] = Vector3.zero end
+        saLastTick[p] = now; saPushVelSample(p, vel)
         local hum = c:FindFirstChildOfClass(S.Humanoid)
         if hum then
             local ok, st = pcall(function() return hum:GetState() end)
-            if ok and (st == Enum.HumanoidStateType.Jumping
-                    or st == Enum.HumanoidStateType.Freefall) then
+            if ok and (st==Enum.HumanoidStateType.Jumping or st==Enum.HumanoidStateType.Freefall) then
                 local prev = saLastJump[p]
-                if not prev or (now - prev) > 0.15 then saLastJump[p] = now end
+                if not prev or (now-prev)>0.15 then saLastJump[p] = now end
             end
         end
     end
 end)
 
+-- ============================================================
+-- PREDICT WRAPPER
+-- ============================================================
 local function predictPosition(targetPlayer, targetPos, startCFrame)
-    if not CONFIG.PredictionEnabled then return targetPos, 0, nil, nil end
-    local origin = startCFrame or CFrame.new(LocalPlayer.Character.HumanoidRootPart.Position)
-    local newOCF, aim, core = silentAimResolveShot(targetPlayer, origin)
-    if not aim then return targetPos, 0, nil, nil end
-    local off = CONFIG.ShootOffset
-    if off.X ~= 0 or off.Y ~= 0 or off.Z ~= 0 then
-        local myH = LocalPlayer.Character:FindFirstChild(S.HRP)
-        local dist = myH and (myH.Position - targetPos).Magnitude or 10
-        if dist < 5 then dist = 5 end
-        aim = aim + Vector3.new(off.X/100*dist, off.Y/100*dist, off.Z/100*dist)
-    end
-    return aim, silentAimLastLead, newOCF, core
+    if not CONFIG.PredictionEnabled then return targetPos, 0 end
+    local state = silentAimBuildState(targetPlayer)
+    if not state then return targetPos, 0 end
+    state.origin = startCFrame and startCFrame.Position or nil
+    local mode = silentAimMode
+    if not silentAimPredictors[mode] then mode = "VM" end
+    local ok, result, lead = pcall(silentAimPredictors[mode], state, silentAimTune, targetPlayer,
+        startCFrame and startCFrame.Position or Vector3.zero)
+    if not ok or not result then return targetPos, 0 end
+    silentAimLastLead = lead or 0
+    return result, silentAimLastLead
 end
 
 -- ============================================================
 -- NOTIFY
 -- ============================================================
 local notifGui = Instance.new("ScreenGui")
-notifGui.Name = S.KillNotif
-notifGui.ResetOnSpawn = false
-notifGui.IgnoreGuiInset = true
-notifGui.DisplayOrder = 1000
+notifGui.Name, notifGui.ResetOnSpawn, notifGui.IgnoreGuiInset, notifGui.DisplayOrder =
+    S.KillNotif, false, true, 1000
 notifGui.Parent = LocalPlayer:WaitForChild(S.PlayerGui)
 
 local function notify(text, color)
     local f = Instance.new("Frame")
-    f.Size = UDim2.new(0, 240, 0, 34)
-    f.Position = UDim2.new(0.5, -120, 0, -50)
-    f.BackgroundColor3 = Color3.fromRGB(20,20,20)
-    f.BackgroundTransparency = 0.1
+    f.Size, f.Position = UDim2.new(0,240,0,34), UDim2.new(0.5,-120,0,-50)
+    f.BackgroundColor3, f.BackgroundTransparency = Color3.fromRGB(20,20,20), 0.1
     f.Parent = notifGui
-    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0,6)
     local s = Instance.new("UIStroke"); s.Color = color; s.Thickness = 1.5; s.Parent = f
     local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(1, -12, 1, 0)
-    l.Position = UDim2.new(0, 6, 0, 0)
-    l.BackgroundTransparency = 1
-    l.Text = text; l.TextColor3 = color
-    l.Font = Enum.Font.SourceSansBold; l.TextSize = 12
+    l.Size, l.Position, l.BackgroundTransparency = UDim2.new(1,-12,1,0), UDim2.new(0,6,0,0), 1
+    l.Text, l.TextColor3 = text, color
+    l.Font, l.TextSize = Enum.Font.SourceSansBold, 12
     l.TextXAlignment = Enum.TextXAlignment.Left
-    l.TextTruncate = Enum.TextTruncate.AtEnd
-    l.Parent = f
-    f:TweenPosition(UDim2.new(0.5, -120, 0, 12), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.3, true)
+    l.TextTruncate = Enum.TextTruncate.AtEnd; l.Parent = f
+    f:TweenPosition(UDim2.new(0.5,-120,0,12), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.3, true)
     task.delay(CONFIG.NotificationDuration, function()
         if f and f.Parent then
-            f:TweenPosition(UDim2.new(0.5, -120, 0, -50), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.25, true)
+            f:TweenPosition(UDim2.new(0.5,-120,0,-50), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.25, true)
             task.wait(0.3); f:Destroy()
         end
     end)
@@ -685,30 +947,30 @@ end
 
 local pendingTargets = {}
 local function watchTargetDeath(tp)
-    if pendingTargets[tp] then return end
+    if not tp or pendingTargets[tp] then return end
     pendingTargets[tp] = true
-    local t0 = os.clock()
-    local conn
+    local t0 = os.clock(); local conn
     conn = RunService.Heartbeat:Connect(function()
         if not pendingTargets[tp] then if conn then conn:Disconnect() end; return end
         local c = tp.Character
         local h = c and c:FindFirstChildOfClass(S.Humanoid)
         if h and h.Health <= 0 then
             pendingTargets[tp] = nil; conn:Disconnect()
-            bumpKill()
-            notify("Killed " .. tp.DisplayName, Color3.fromRGB(60, 200, 90))
+            recordCalibHit(tp); bumpKill()
+            notify("Killed "..tp.DisplayName, Color3.fromRGB(60,200,90))
             return
         end
         if os.clock() - t0 > CONFIG.KillCheckTime then
             pendingTargets[tp] = nil; conn:Disconnect()
+            recordCalibMiss(tp)
         end
     end)
 end
 
 -- ============================================================
--- GUN.ACTIVATED → SILENT SHOOT
+-- GUN.ACTIVATED HOOK
 -- ============================================================
-local lastShot = 0
+local lastShotAt = 0
 
 local function findShootRemote(gun)
     local direct = gun:FindFirstChild(CONFIG.ShootEventName)
@@ -724,52 +986,63 @@ local function findShootRemote(gun)
     return nil
 end
 
-local function silentShoot(targetPlayer, gun)
-    if AT.tampered then return false end
-    if not targetPlayer or not gun then return false end
-    if os.clock() - lastShot < CONFIG.Cooldown then return false end
-    lastShot = os.clock()
-
-    local tChar = targetPlayer.Character
-    if not tChar then return false end
-    local tHrp = tChar:FindFirstChild(S.HRP) or tChar:FindFirstChild(S.Head)
-    local tHum = tChar:FindFirstChildOfClass(S.Humanoid)
-    if not tHrp then return false end
-    if tHum and tHum.Health <= 0 then return false end
+local function fireSilentShot(gun, murderer)
+    if AT.tampered then return end
+    if not HOOK.enabled then HOOK.lastMsg = "disabled"; return end
+    if os.clock() - lastShotAt < CONFIG.Cooldown then return end
+    lastShotAt = os.clock()
 
     local myChar = LocalPlayer.Character
-    if not myChar then return false end
-    local rh = myChar:FindFirstChild(S.RightHand) or myChar:FindFirstChild(S.RightArm)
-    if not rh then return false end
+    local myHand = myChar and (myChar:FindFirstChild(S.RightHand) or myChar:FindFirstChild(S.RightArm))
+    if not myHand then HOOK.lastMsg = "no-hand"; return end
 
-    local shootEvent = findShootRemote(gun)
-    if not shootEvent then return false end
+    local mChar = murderer and murderer.Character
+    if not mChar then HOOK.lastMsg = "no-mchar"; return end
+    local mHRP = mChar:FindFirstChild(S.HRP)
+    if not mHRP then HOOK.lastMsg = "no-mhrp"; return end
 
-    local startCF = CFrame.new(rh.Position)
-    local aim, _, _ = predictPosition(targetPlayer, tHrp.Position, startCF)
-    if not aim then return false end
-    aim = aim + Vector3.new(0, 1.5, 0)
+    local shootRemote = findShootRemote(gun)
+    if not shootRemote then HOOK.lastMsg = "no-remote"; return end
 
-    if CONFIG.WallCheck then
-        if silentAimWallBlocked(myChar, tChar, startCF.Position, aim) then return false end
-    end
+    local originCF = CFrame.new(myHand.Position)
+    local aimPos = predictPosition(murderer, mHRP.Position, originCF)
+    if not aimPos then HOOK.lastMsg = "predict-fail"; return end
 
+    HOOK.shots += 1
+    HOOK.lastMsg = "fired"
     bumpShot()
-    task.spawn(function()
-        pcall(function()
-            shootEvent:FireServer(startCF, CFrame.new(aim))
-        end)
+    pcall(function()
+        shootRemote:FireServer(originCF, CFrame.new(aimPos))
     end)
-    watchTargetDeath(targetPlayer)
-    return true
+    watchTargetDeath(murderer)
 end
 
 local function hookGun(gun)
     if gun:GetAttribute(S.KillHooked) then return end
     gun:SetAttribute(S.KillHooked, true)
+    HOOK.hooked += 1
+
+    if type(getconnections) == "function" then
+        pcall(function()
+            for _, conn in ipairs(getconnections(gun.Activated) or {}) do
+                pcall(function()
+                    if conn.Disable then conn:Disable()
+                    elseif conn.Enabled ~= nil then conn.Enabled = false
+                    elseif conn.Disconnect then conn:Disconnect()
+                    end
+                    HOOK.disabled += 1
+                end)
+            end
+        end)
+    end
+
     gun.Activated:Connect(function()
         local m = getMurderer()
-        if m and m ~= LocalPlayer then silentShoot(m, gun) end
+        if m and m ~= LocalPlayer then
+            fireSilentShot(gun, m)
+        else
+            HOOK.lastMsg = "no-murderer"
+        end
     end)
 end
 
@@ -780,173 +1053,164 @@ local function bindCharacter(char)
     local g = char:FindFirstChild(CONFIG.GunName)
     if g and g:IsA("Tool") then hookGun(g) end
 end
-
 if LocalPlayer.Character then bindCharacter(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(bindCharacter)
 
 -- ============================================================
--- MINI SETTINGS (без mode-кнопки)
+-- MINI UI
 -- ============================================================
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = S.KillMini
-screenGui.ResetOnSpawn = false
-screenGui.IgnoreGuiInset = true
-screenGui.DisplayOrder = 999
+screenGui.Name, screenGui.ResetOnSpawn, screenGui.IgnoreGuiInset, screenGui.DisplayOrder =
+    S.KillMini, false, true, 999
 local old = LocalPlayer:WaitForChild(S.PlayerGui):FindFirstChild(S.KillMini)
 if old then old:Destroy() end
 screenGui.Parent = LocalPlayer.PlayerGui
 
 local gear = Instance.new("TextButton")
-gear.Size = UDim2.new(0, 22, 0, 22)
-gear.Position = UDim2.new(1, -32, 0, 8)
-gear.BackgroundColor3 = Color3.fromRGB(30,30,30)
-gear.Text = "⚙"; gear.TextColor3 = Color3.fromRGB(220,220,220)
-gear.TextSize = 12; gear.Font = Enum.Font.SourceSansBold
+gear.Size, gear.Position = UDim2.new(0,22,0,22), UDim2.new(1,-32,0,8)
+gear.BackgroundColor3, gear.Text, gear.TextColor3 = Color3.fromRGB(30,30,30), "⚙", Color3.fromRGB(220,220,220)
+gear.TextSize, gear.Font = 12, Enum.Font.SourceSansBold
 gear.Parent = screenGui
-Instance.new("UICorner", gear).CornerRadius = UDim.new(1, 0)
-local gs = Instance.new("UIStroke"); gs.Color = Color3.fromRGB(90,90,90); gs.Thickness = 1.5
-gs.Parent = gear
+Instance.new("UICorner", gear).CornerRadius = UDim.new(1,0)
+local gs = Instance.new("UIStroke"); gs.Color = Color3.fromRGB(90,90,90); gs.Thickness = 1.5; gs.Parent = gear
 
 local mini = Instance.new("Frame")
-mini.Size = UDim2.new(0, 180, 0, 200)
-mini.Position = UDim2.new(1, -190, 0, 36)
-mini.BackgroundColor3 = Color3.fromRGB(18,18,18)
-mini.Visible = false
+mini.Size, mini.Position = UDim2.new(0,190,0,200), UDim2.new(1,-200,0,36)
+mini.BackgroundColor3, mini.Visible = Color3.fromRGB(18,18,18), false
 mini.Parent = screenGui
-Instance.new("UICorner", mini).CornerRadius = UDim.new(0, 6)
-local ms = Instance.new("UIStroke"); ms.Color = Color3.fromRGB(70,70,70); ms.Thickness = 1.5
-ms.Parent = mini
+Instance.new("UICorner", mini).CornerRadius = UDim.new(0,6)
+local ms = Instance.new("UIStroke"); ms.Color = Color3.fromRGB(70,70,70); ms.Thickness = 1.5; ms.Parent = mini
 
 local PAD, ROW_H, STEP = 5, 16, 18
-
 local function lbl(text, y, color)
     local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(1, -PAD*2, 0, 14)
-    l.Position = UDim2.new(0, PAD, 0, y)
-    l.BackgroundTransparency = 1
-    l.Text = text; l.TextColor3 = color or Color3.fromRGB(220,220,220)
+    l.Size, l.Position = UDim2.new(1,-PAD*2,0,14), UDim2.new(0,PAD,0,y)
+    l.BackgroundTransparency = 1; l.Text = text
+    l.TextColor3 = color or Color3.fromRGB(220,220,220)
     l.TextXAlignment = Enum.TextXAlignment.Left
-    l.Font = Enum.Font.SourceSansBold; l.TextSize = 10
-    l.Parent = mini
-    return l
+    l.Font, l.TextSize = Enum.Font.SourceSansBold, 10
+    l.Parent = mini; return l
 end
-
 local function toggle(text, y, getter, setter)
     local b = Instance.new("TextButton")
-    b.Size = UDim2.new(1, -PAD*2, 0, ROW_H)
-    b.Position = UDim2.new(0, PAD, 0, y)
+    b.Size, b.Position = UDim2.new(1,-PAD*2,0,ROW_H), UDim2.new(0,PAD,0,y)
     b.BackgroundColor3 = getter() and Color3.fromRGB(60,140,80) or Color3.fromRGB(140,50,50)
-    b.Text = text .. ": " .. (getter() and "ON" or "OFF")
+    b.Text = text..": "..(getter() and "ON" or "OFF")
     b.TextColor3 = Color3.fromRGB(255,255,255)
-    b.Font = Enum.Font.SourceSansBold; b.TextSize = 10
+    b.Font, b.TextSize = Enum.Font.SourceSansBold, 10
     b.Parent = mini
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 3)
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,3)
     b.Activated:Connect(function()
         local ok, cur = pcall(getter); if not ok then return end
         pcall(setter, not cur)
         local ok2, nv = pcall(getter); if not ok2 then return end
         b.BackgroundColor3 = nv and Color3.fromRGB(60,140,80) or Color3.fromRGB(140,50,50)
-        b.Text = text .. ": " .. (nv and "ON" or "OFF")
+        b.Text = text..": "..(nv and "ON" or "OFF")
     end)
 end
-
 local function adj(label, y, getter, setter, step, fmt)
     local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(0.55, -PAD, 0, ROW_H)
-    l.Position = UDim2.new(0, PAD, 0, y)
-    l.BackgroundTransparency = 1
-    l.Text = label; l.TextColor3 = Color3.fromRGB(220,220,220)
+    l.Size, l.Position = UDim2.new(0.55,-PAD,0,ROW_H), UDim2.new(0,PAD,0,y)
+    l.BackgroundTransparency = 1; l.Text = label
+    l.TextColor3 = Color3.fromRGB(220,220,220)
     l.TextXAlignment = Enum.TextXAlignment.Left
-    l.Font = Enum.Font.SourceSansBold; l.TextSize = 10
+    l.Font, l.TextSize = Enum.Font.SourceSansBold, 10
     l.Parent = mini
     local v = Instance.new("TextLabel")
-    v.Size = UDim2.new(0, 46, 0, ROW_H)
-    v.Position = UDim2.new(1, -PAD - 16*2 - 46 - 2, 0, y)
-    v.BackgroundColor3 = Color3.fromRGB(35,35,35)
-    v.Text = fmt(getter()); v.TextColor3 = Color3.fromRGB(255,220,100)
-    v.Font = Enum.Font.SourceSansBold; v.TextSize = 9
+    v.Size, v.Position = UDim2.new(0,46,0,ROW_H), UDim2.new(1,-PAD-16*2-46-2,0,y)
+    v.BackgroundColor3, v.Text, v.TextColor3 = Color3.fromRGB(35,35,35), fmt(getter()), Color3.fromRGB(255,220,100)
+    v.Font, v.TextSize = Enum.Font.SourceSansBold, 9
     v.Parent = mini
-    Instance.new("UICorner", v).CornerRadius = UDim.new(0, 2)
-    local function apply(delta)
-        local ok, cur = pcall(getter)
-        if not ok or type(cur) ~= "number" then return end
-        local nv = cur + delta
-        if nv < 0 then nv = 0 end
+    Instance.new("UICorner", v).CornerRadius = UDim.new(0,2)
+    local function apply(d)
+        local ok, cur = pcall(getter); if not ok or type(cur)~="number" then return end
+        local nv = cur + d; if nv < 0 then nv = 0 end
         pcall(setter, nv)
         local ok2, nv2 = pcall(getter)
-        if ok2 and type(nv2) == "number" then v.Text = fmt(nv2) end
+        if ok2 and type(nv2)=="number" then v.Text = fmt(nv2) end
     end
-    local function mk(txt, xoff, bg)
+    local function mk(txt, xo, bg)
         local b = Instance.new("TextButton")
-        b.Size = UDim2.new(0, 16, 0, 16)
-        b.Position = UDim2.new(1, -PAD + xoff, 0, y)
-        b.BackgroundColor3 = bg
-        b.Text = txt; b.TextColor3 = Color3.fromRGB(255,255,255)
-        b.Font = Enum.Font.SourceSansBold; b.TextSize = 12
+        b.Size, b.Position = UDim2.new(0,16,0,16), UDim2.new(1,-PAD+xo,0,y)
+        b.BackgroundColor3, b.Text, b.TextColor3 = bg, txt, Color3.fromRGB(255,255,255)
+        b.Font, b.TextSize = Enum.Font.SourceSansBold, 12
         b.Parent = mini
-        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 2)
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0,2)
         return b
     end
-    local mn = mk("−", -(16*2 + 2), Color3.fromRGB(100,40,40))
+    local mn = mk("−", -(16*2+2), Color3.fromRGB(100,40,40))
     local pl = mk("+", -16, Color3.fromRGB(40,100,60))
     mn.Activated:Connect(function() apply(-step) end)
     pl.Activated:Connect(function() apply( step) end)
 end
 
-lbl("SILENT AIM  ·  AutoPredict", 4, Color3.fromRGB(255,220,100))
+lbl("SILENT AIM", 4, Color3.fromRGB(255,220,100))
+local modeBtn = Instance.new("TextButton")
+modeBtn.Size, modeBtn.Position = UDim2.new(1,-PAD*2,0,ROW_H), UDim2.new(0,PAD,0,20)
+modeBtn.BackgroundColor3, modeBtn.Text, modeBtn.TextColor3 =
+    Color3.fromRGB(50,100,160), "Mode: "..silentAimMode, Color3.fromRGB(255,255,255)
+modeBtn.Font, modeBtn.TextSize = Enum.Font.SourceSansBold, 10
+modeBtn.Parent = mini
+Instance.new("UICorner", modeBtn).CornerRadius = UDim.new(0,3)
+modeBtn.Activated:Connect(function()
+    local idx = 1
+    for i, m in ipairs(SILENT_AIM_MODES) do if m==silentAimMode then idx=i; break end end
+    idx = idx % #SILENT_AIM_MODES + 1
+    silentAimMode = SILENT_AIM_MODES[idx]
+    modeBtn.Text = "Mode: "..silentAimMode
+end)
 
-local Y = 24
+local Y = 40
 local function row() local y = Y; Y = Y + STEP; return y end
 
+toggle("Silent", row(), function() return HOOK.enabled end, function(v) HOOK.enabled = v end)
 toggle("Predict", row(), function() return CONFIG.PredictionEnabled end, function(v) CONFIG.PredictionEnabled = v end)
-toggle("Wall Check", row(), function() return CONFIG.WallCheck end, function(v) CONFIG.WallCheck = v end)
-toggle("Flee Fix", row(),
-    function() return FLEE_OFFSET_X > 0 end,
-    function(v)
-        if v then FLEE_OFFSET_X, FLEE_OFFSET_Y = 2.0, 1.0
-        else FLEE_OFFSET_X, FLEE_OFFSET_Y = 0.0, 0.0 end
-    end)
-adj("base", row(), function() return silentAimTune.base end, function(v) silentAimTune.base = v end,
-    0.01, function(v) return string.format("%dms", math.floor(v*1000+0.5)) end)
-adj("maxLead", row(), function() return silentAimTune.maxLead end, function(v) silentAimTune.maxLead = v end,
-    0.02, function(v) return string.format("%dms", math.floor(v*1000+0.5)) end)
-adj("intent", row(), function() return silentAimTune.intentBlend end, function(v) silentAimTune.intentBlend = v end,
-    0.05, function(v) return string.format("%d%%", math.floor(v*100+0.5)) end)
-adj("bulletSpeed", row(), function() return silentAimTune.bulletSpeed end, function(v) silentAimTune.bulletSpeed = v end,
-    0.0002, function(v) return string.format("%.4f", v) end)
-adj("fleeX", row(), function() return FLEE_OFFSET_X end, function(v) FLEE_OFFSET_X = v end,
-    0.5, function(v) return string.format("%.1f", v) end)
-adj("fleeY", row(), function() return FLEE_OFFSET_Y end, function(v) FLEE_OFFSET_Y = v end,
-    0.5, function(v) return string.format("%.1f", v) end)
+toggle("Adv", row(), function() return ADV.enabled end, function(v) ADV.enabled = v end)
+adj("simpleLead", row(), function() return silentAimTune.simpleLead end,
+    function(v) silentAimTune.simpleLead = v end, 0.2,
+    function(v) return string.format("%.1f", v) end)
+adj("base", row(), function() return silentAimTune.base end,
+    function(v) silentAimTune.base = v end, 0.01,
+    function(v) return string.format("%dms", math.floor(v*1000+0.5)) end)
+adj("maxLead", row(), function() return silentAimTune.maxLead end,
+    function(v) silentAimTune.maxLead = v end, 0.02,
+    function(v) return string.format("%dms", math.floor(v*1000+0.5)) end)
+adj("bullet", row(), function() return silentAimTune.bulletSpeed end,
+    function(v) silentAimTune.bulletSpeed = v end, 0.0025,
+    function(v) return string.format("%.4f", v) end)
 
-local statsTitle = lbl("Shots Base", Y, Color3.fromRGB(160, 220, 255)); Y = Y + 14
-
+lbl("Shots Base", Y, Color3.fromRGB(160,220,255)); Y += 14
 local statsLbl = Instance.new("TextLabel")
-statsLbl.Size = UDim2.new(1, -PAD*2, 0, 28)
-statsLbl.Position = UDim2.new(0, PAD, 0, Y); Y = Y + 30
+statsLbl.Size, statsLbl.Position = UDim2.new(1,-PAD*2,0,80), UDim2.new(0,PAD,0,Y); Y += 82
 statsLbl.BackgroundColor3 = Color3.fromRGB(22,22,22)
-statsLbl.Text = "shots: 0\nkills: 0"
+statsLbl.Text = "shots: 0\nkills: 0\nping: --ms\nguns: 0 / -0\nfired: 0\nlast: --"
 statsLbl.TextColor3 = Color3.fromRGB(220,220,220)
-statsLbl.Font = Enum.Font.SourceSansBold
-statsLbl.TextSize = 10
+statsLbl.Font, statsLbl.TextSize = Enum.Font.SourceSansBold, 10
 statsLbl.TextXAlignment = Enum.TextXAlignment.Left
 statsLbl.TextYAlignment = Enum.TextYAlignment.Top
 statsLbl.Parent = mini
-Instance.new("UICorner", statsLbl).CornerRadius = UDim.new(0, 3)
+Instance.new("UICorner", statsLbl).CornerRadius = UDim.new(0,3)
 
 updateShotsBaseUI = function()
-    statsLbl.Text = string.format("shots: %d (+%d)\nkills: %d (+%d)",
-        totalShots, pendingShots, totalKills, pendingKills)
+    statsLbl.Text = string.format(
+        "shots: %d (+%d)\nkills: %d (+%d)\nping: %dms\nguns: %d / -%d\nfired: %d\nlast: %s",
+        totalShots, pendingShots, totalKills, pendingKills,
+        getPingMs(), HOOK.hooked, HOOK.disabled, HOOK.shots, HOOK.lastMsg)
 end
 updateShotsBaseUI()
+task.spawn(function() while task.wait(0.5) do if updateShotsBaseUI then updateShotsBaseUI() end end end)
 
-mini.Size = UDim2.new(0, 180, 0, Y + 6)
-
+mini.Size = UDim2.new(0,190,0,Y+6)
 gear.Activated:Connect(function() mini.Visible = not mini.Visible end)
 
 Players.PlayerRemoving:Connect(function(p)
     saHist[p], saSmoothVel[p], saSmoothAccel[p] = nil, nil, nil
     saLastJump[p], saLastTick[p], pendingTargets[p] = nil, nil, nil
+    targetCalib[p] = nil; vmContexts[p] = nil
 end)
 
-print("[Shooter Slop] AutoPredict only. air→Full, ground→Dynamic↔Adaptive blend. JAJAJAJAJAJAJ")
+if type(getconnections) ~= "function" then
+    warn("[Shooter Slop] getconnections недоступен — возможен двойной выстрел (наш + игры)")
+end
+
+print("[Shooter Slop] Loaded. Gun.Activated mode | Full VM predictor | Mode: "..silentAimMode)
